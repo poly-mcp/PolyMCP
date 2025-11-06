@@ -2,7 +2,7 @@
   <img src="logo.png" alt="PolymCP Logo" width="400"/>
 </p>
 
-[![GitHub stars](https://img.shields.io/github/stars/JustVugg/polymcp?style=social)](https://github.com/JustVugg/polymcp/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/llm-use/polymcp?style=social)](https://github.com/JustVugg/polymcp/stargazers)
 
 > **PolyMCP: A Universal MCP Agent & Toolkit for Intelligent Tool Orchestration**
 
