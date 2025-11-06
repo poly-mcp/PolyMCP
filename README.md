@@ -198,7 +198,7 @@ pytest tests/ -v
 
 ## ⭐ Stars Chart
 
-[![Stargazers over time](https://starchart.cc/JustVugg/polymcp.svg)](https://starchart.cc/JustVugg/polymcp)
+[![Star History Chart](https://api.star-history.com/svg?repos=llm-use/Polymcp&type=Date)](https://star-history.com/#llm-use/Polymcp&Date)
 
 ---
 
