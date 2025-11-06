@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "description": "Registry for HTTP and stdio MCP servers",
+  
+  "servers": [
+    "http://localhost:8000/mcp",
+    "http://localhost:8001/mcp"
+  ],
+  
+  "stdio_servers": [
+    {
+      "name": "playwright",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "env": {
+        "DISPLAY": ":1"
+      },
+      "description": "Browser automation with Playwright",
+      "tags": ["browser", "automation", "web"]
+    },
+    {
+      "name": "filesystem",
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem@latest", "/path/to/allowed/directory"],
+      "env": {},
+      "description": "File system operations",
+      "tags": ["filesystem", "files"]
+    },
+    {
+      "name": "github",
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-github@latest"],
+      "env": {
+        "GITHUB_TOKEN": "your_token_here"
+      },
+      "description": "GitHub API operations",
+      "tags": ["github", "git", "api"]
+    }
+  ],
+  
+  "server_metadata": {
+    "http://localhost:8000/mcp": {
+      "name": "Text Analysis Server",
+      "description": "Text processing tools",
+      "tags": ["text", "nlp"],
+      "type": "http",
+      "auth_required": false
+    },
+    "http://localhost:8001/mcp": {
+      "name": "Advanced Tools Server",
+      "description": "Data processing utilities",
+      "tags": ["data", "utilities"],
+      "type": "http",
+      "auth_required": false
+    }
+  },
+  
+  "configuration": {
+    "auto_discover": true,
+    "discovery_timeout": 10,
+    "retry_on_failure": true,
+    "max_retries": 3,
+    "stdio_timeout": 30
+  }
+}
