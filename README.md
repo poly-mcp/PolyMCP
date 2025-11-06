@@ -210,8 +210,7 @@ MIT License
 
 ## 🔗 Useful Links
 
-- [MCP Specification](https://github.com/modelcontextprotocol/spec)
-- [PolyMCP on GitHub](https://github.com/JustVugg/polymcp)
+- [PolyMCP on GitHub](https://github.com/llm-use/polymcp)
 - [Playwright MCP](https://github.com/microsoft/playwright-mcp)
 
 ---
