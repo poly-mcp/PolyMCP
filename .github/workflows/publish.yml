@@ -25,19 +25,65 @@ jobs:
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
-          pip install build
+          pip install build twine wheel setuptools
 
       - name: Generate dynamic version
         run: |
           BUILD_NUMBER=$(date +%s)
           echo "__version__ = \"0.0.0.dev${BUILD_NUMBER}\"" > polymcp/version.py
           echo "Generated version: 0.0.0.dev${BUILD_NUMBER}"
+          cat polymcp/version.py
 
-      - name: Build package
+      - name: Verify package structure
         run: |
-          python -m build
+          echo "=== Repository structure ==="
+          ls -la
+          echo "=== polymcp/ directory ==="
+          ls -la polymcp/
+          echo "=== Check __init__.py exists ==="
+          test -f polymcp/__init__.py && echo "__init__.py exists" || echo "__init__.py MISSING!"
+
+      - name: Test setup.py metadata
+        run: |
+          echo "=== Testing setup.py can read metadata ==="
+          python setup.py --name
+          python setup.py --version
+          python setup.py --author
+          python setup.py --description
+
+      - name: Build package with debug
+        run: |
+          echo "=== Building package ==="
+          python -m build --no-isolation
+          echo "=== Build complete, checking dist/ ==="
+          ls -la dist/
+
+      - name: Verify wheel contents
+        run: |
+          echo "=== Checking wheel metadata ==="
+          cd dist
+          # List wheel contents
+          python -m zipfile -l *.whl | grep -E "(METADATA|PKG-INFO|RECORD)"
+          # Extract and show METADATA
+          unzip -p *.whl "*/METADATA" || echo "No METADATA found!"
+          cd ..
+
+      - name: Check package with twine
+        run: |
+          echo "=== Running twine check ==="
+          twine check dist/* || true
+
+      - name: Final verification before publish
+        run: |
+          echo "=== Final package info ==="
+          ls -la dist/
+          for file in dist/*; do
+            echo "File: $file"
+            echo "Size: $(stat -c%s "$file") bytes"
+          done
 
       - name: Publish to PyPI
+        if: success()
         uses: pypa/gh-action-pypi-publish@v1.10.0
         with:
           verify-metadata: true
