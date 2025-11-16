@@ -31,36 +31,9 @@ jobs:
         run: |
           echo "=== Checking root files ==="
           test -f setup.py && echo "✓ setup.py" || echo "✗ MISSING setup.py"
+          test -f setup.cfg && echo "✓ setup.cfg" || echo "✗ MISSING setup.cfg"
           test -f pyproject.toml && echo "✓ pyproject.toml" || echo "✗ MISSING pyproject.toml"
           test -f README.md && echo "✓ README.md" || echo "✗ MISSING README.md"
-          test -f MANIFEST.in && echo "✓ MANIFEST.in" || echo "✗ MISSING MANIFEST.in"
-          
-          echo ""
-          echo "=== Checking main package ==="
-          test -f polymcp/__init__.py && echo "✓ polymcp/__init__.py" || echo "✗ MISSING polymcp/__init__.py"
-          test -f polymcp/version.py && echo "✓ polymcp/version.py" || echo "✗ MISSING polymcp/version.py"
-          
-          echo ""
-          echo "=== Checking polyagent subpackage ==="
-          test -f polymcp/polyagent/__init__.py && echo "✓ polyagent/__init__.py" || echo "✗ MISSING polyagent/__init__.py"
-          test -f polymcp/polyagent/agent.py && echo "✓ polyagent/agent.py" || echo "✗ MISSING polyagent/agent.py"
-          test -f polymcp/polyagent/llm_providers.py && echo "✓ polyagent/llm_providers.py" || echo "✗ MISSING polyagent/llm_providers.py"
-          
-          echo ""
-          echo "=== Checking polymcp_toolkit subpackage ==="
-          test -f polymcp/polymcp_toolkit/__init__.py && echo "✓ polymcp_toolkit/__init__.py" || echo "✗ MISSING polymcp_toolkit/__init__.py"
-          test -f polymcp/polymcp_toolkit/expose.py && echo "✓ polymcp_toolkit/expose.py" || echo "✗ MISSING polymcp_toolkit/expose.py"
-          
-          echo ""
-          echo "=== Package tree ==="
-          find polymcp -name "*.py" -type f | sort
-
-      - name: Test setup.py metadata
-        run: |
-          python setup.py --name
-          python setup.py --version
-          python setup.py --author
-          python setup.py --description
 
       - name: Clean previous builds
         run: |
@@ -73,33 +46,30 @@ jobs:
           echo "=== dist/ contents ==="
           ls -la dist/
 
-      - name: Verify wheel contents
+      - name: Check metadata in wheel
         run: |
-          echo "=== Wheel contents ==="
-          python -m zipfile -l dist/*.whl | grep -E "\.py$|METADATA|RECORD" | head -30
-
-      - name: Extract and check metadata in temp directory
-        run: |
-          mkdir -p /tmp/wheel_check
-          cd /tmp/wheel_check
+          echo "=== Extracting and checking METADATA ==="
+          mkdir -p /tmp/wheel_test
+          cd /tmp/wheel_test
           unzip -q $GITHUB_WORKSPACE/dist/*.whl
-          echo "=== METADATA content (first 20 lines) ==="
-          cat *.dist-info/METADATA | head -20
-          cd $GITHUB_WORKSPACE
-          rm -rf /tmp/wheel_check
-
-      - name: Check package with twine
-        run: |
-          echo "=== Running twine check ==="
-          twine check dist/*.whl dist/*.tar.gz
-
-      - name: Final dist check
-        run: |
-          echo "=== Final dist/ contents before publish ==="
-          ls -la dist/
+          echo "=== METADATA full content ==="
+          cat *.dist-info/METADATA
           echo ""
-          echo "=== Files to be uploaded ==="
-          ls -1 dist/*.whl dist/*.tar.gz
+          echo "=== Checking for Name and Version fields ==="
+          grep -E "^(Name|Version):" *.dist-info/METADATA || echo "Name/Version fields NOT FOUND!"
+          cd $GITHUB_WORKSPACE
+          rm -rf /tmp/wheel_test
+
+      - name: Check package with local twine
+        run: |
+          echo "=== Running twine check with local twine ==="
+          twine check --strict dist/*
+
+      - name: Test installation
+        run: |
+          pip install dist/*.whl
+          python -c "import polymcp; print(f'Package imported successfully: {polymcp.__name__}')"
+          pip show polymcp
 
       - name: Publish to PyPI
         if: success()
