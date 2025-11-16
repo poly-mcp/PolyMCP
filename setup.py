@@ -1,13 +1,17 @@
 from setuptools import setup, find_packages
 import os
 
-# Importa la versione
-exec(open('polymcp/version.py').read())
+# NON usare exec() per la versione - questo causa il problema!
+__version__ = "0.0.1"
 
 # Legge README.md
 here = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
-    long_description = f.read()
+readme_path = os.path.join(here, 'README.md')
+if os.path.exists(readme_path):
+    with open(readme_path, encoding='utf-8') as f:
+        long_description = f.read()
+else:
+    long_description = ""
 
 setup(
     name="polymcp",
