@@ -1,18 +1,14 @@
-"""
-PolyMCP - Universal MCP Agent & Toolkit
-"""
-
 from setuptools import setup, find_packages
 from pathlib import Path
 
-# Read README for long description
+# Leggi README
 readme_path = Path(__file__).parent / "README.md"
 long_description = ""
 if readme_path.exists():
     with open(readme_path, encoding="utf-8") as f:
         long_description = f.read()
 
-# Dynamic version: read from polymcp/version.py
+# Leggi versione dinamicamente da version.py
 version_file = Path(__file__).parent / "polymcp" / "version.py"
 version = "0.0.0.dev0"
 if version_file.exists():
@@ -25,7 +21,7 @@ setup(
     name="polymcp",
     version=version,
     author="PolyMCP",
-    author_email="noreply@example.com",  # ← CAMBIA QUESTA RIGA!
+    author_email="noreply@example.com",
     description="Universal MCP Agent & Toolkit for intelligent LLM tool orchestration",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -68,9 +64,6 @@ setup(
             "mypy>=1.8.0",
             "httpx>=0.26.0",
         ],
-    },
-    entry_points={
-        "console_scripts": [],
     },
     include_package_data=True,
     zip_safe=False,
