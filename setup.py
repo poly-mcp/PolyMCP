@@ -1,21 +1,18 @@
 from setuptools import setup, find_packages
 from pathlib import Path
 
-# Leggi README
+# Legge README.md
 readme_path = Path(__file__).parent / "README.md"
-long_description = ""
-if readme_path.exists():
-    with open(readme_path, encoding="utf-8") as f:
-        long_description = f.read()
+long_description = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
 
-# Leggi versione dinamicamente da version.py
-version_file = Path(__file__).parent / "polymcp" / "version.py"
-version = "0.0.0.dev0"
+# Version dinamica generata da workflow GitHub
+version_file = Path(__file__).parent / "polymcp/version.py"
+version = "0.0.0"
 if version_file.exists():
     namespace = {}
     with open(version_file, "r", encoding="utf-8") as f:
         exec(f.read(), namespace)
-        version = namespace.get('__version__', version)
+        version = namespace.get("__version__", version)
 
 setup(
     name="polymcp",
@@ -27,19 +24,8 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/llm-use/polymcp",
     packages=find_packages(exclude=["tests", "examples", "docs"]),
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    ],
+    include_package_data=True,
+    zip_safe=False,
     python_requires=">=3.8",
     install_requires=[
         "fastapi>=0.109.0",
@@ -51,10 +37,7 @@ setup(
     extras_require={
         "openai": ["openai>=1.10.0"],
         "anthropic": ["anthropic>=0.8.0"],
-        "all": [
-            "openai>=1.10.0",
-            "anthropic>=0.8.0",
-        ],
+        "all": ["openai>=1.10.0", "anthropic>=0.8.0"],
         "dev": [
             "pytest>=7.4.0",
             "pytest-asyncio>=0.23.0",
@@ -65,12 +48,5 @@ setup(
             "httpx>=0.26.0",
         ],
     },
-    include_package_data=True,
-    zip_safe=False,
-    keywords="mcp agent llm ai openai anthropic claude fastapi tools",
-    project_urls={
-        "Bug Reports": "https://github.com/llm-use/polymcp/issues",
-        "Source": "https://github.com/llm-use/polymcp",
-        "Documentation": "https://github.com/llm-use/polymcp#readme",
-    },
+    entry_points={"console_scripts": []},
 )
