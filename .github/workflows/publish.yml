@@ -76,23 +76,30 @@ jobs:
       - name: Verify wheel contents
         run: |
           echo "=== Wheel contents ==="
-          cd dist
-          unzip -l *.whl | grep -E "\.py$|METADATA|RECORD" | head -30
-          cd ..
+          python -m zipfile -l dist/*.whl | grep -E "\.py$|METADATA|RECORD" | head -30
 
-      - name: Extract and check metadata
+      - name: Extract and check metadata in temp directory
         run: |
-          cd dist
-          echo "=== Extracting metadata from wheel ==="
-          unzip -q *.whl
+          mkdir -p /tmp/wheel_check
+          cd /tmp/wheel_check
+          unzip -q $GITHUB_WORKSPACE/dist/*.whl
           echo "=== METADATA content (first 20 lines) ==="
           cat *.dist-info/METADATA | head -20
-          cd ..
+          cd $GITHUB_WORKSPACE
+          rm -rf /tmp/wheel_check
 
       - name: Check package with twine
         run: |
           echo "=== Running twine check ==="
-          twine check dist/*
+          twine check dist/*.whl dist/*.tar.gz
+
+      - name: Final dist check
+        run: |
+          echo "=== Final dist/ contents before publish ==="
+          ls -la dist/
+          echo ""
+          echo "=== Files to be uploaded ==="
+          ls -1 dist/*.whl dist/*.tar.gz
 
       - name: Publish to PyPI
         if: success()
