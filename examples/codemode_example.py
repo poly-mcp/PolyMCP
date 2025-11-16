@@ -17,7 +17,7 @@ from polymcp_toolkit import expose_tools
 import os
 
 
-# Sample business tools for demonstration
+# business tools for demonstration
 def create_transaction(
     transaction_type: str,
     category: str,
@@ -318,4 +318,5 @@ if __name__ == "__main__":
         print(f"\n❌ Fatal error: {e}")
         import traceback
         traceback.print_exc()
+
         sys.exit(1)
