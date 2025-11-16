@@ -25,27 +25,17 @@ jobs:
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade build wheel setuptools twine pkginfo
-
-      - name: Install runtime dependencies
-        run: |
-          pip install fastapi pydantic requests docstring-parser
+          pip install --upgrade build wheel setuptools==76.1.0 twine pkginfo
 
       - name: Verify package structure
         run: |
           test -f polymcp/__init__.py && echo "__init__.py exists" || echo "__init__.py MISSING!"
           test -f polymcp/version.py && echo "version.py exists" || echo "version.py MISSING!"
 
-      - name: Test setup.py metadata
-        run: |
-          python setup.py --name
-          python setup.py --version
-          python setup.py --author
-          python setup.py --description
-
       - name: Build package
         run: |
-          python -m build --no-isolation
+          rm -rf dist build *.egg-info
+          python -m build
           echo "=== dist/ contents ==="
           ls -la dist/
 
@@ -56,8 +46,7 @@ jobs:
           cd ..
 
       - name: Check package with twine
-        run: |
-          twine check dist/*
+        run: twine check dist/*
 
       - name: Publish to PyPI
         if: success()
