@@ -27,11 +27,33 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade build setuptools>=68.0.0 wheel twine
 
-      - name: Verify package structure
+      - name: Verify complete package structure
         run: |
-          test -f setup.py && echo "setup.py exists" || echo "setup.py MISSING!"
-          test -f polymcp/__init__.py && echo "__init__.py exists" || echo "__init__.py MISSING!"
-          test -f README.md && echo "README.md exists" || echo "README.md MISSING!"
+          echo "=== Checking root files ==="
+          test -f setup.py && echo "✓ setup.py" || echo "✗ MISSING setup.py"
+          test -f pyproject.toml && echo "✓ pyproject.toml" || echo "✗ MISSING pyproject.toml"
+          test -f README.md && echo "✓ README.md" || echo "✗ MISSING README.md"
+          test -f MANIFEST.in && echo "✓ MANIFEST.in" || echo "✗ MISSING MANIFEST.in"
+          
+          echo ""
+          echo "=== Checking main package ==="
+          test -f polymcp/__init__.py && echo "✓ polymcp/__init__.py" || echo "✗ MISSING polymcp/__init__.py"
+          test -f polymcp/version.py && echo "✓ polymcp/version.py" || echo "✗ MISSING polymcp/version.py"
+          
+          echo ""
+          echo "=== Checking polyagent subpackage ==="
+          test -f polymcp/polyagent/__init__.py && echo "✓ polyagent/__init__.py" || echo "✗ MISSING polyagent/__init__.py"
+          test -f polymcp/polyagent/agent.py && echo "✓ polyagent/agent.py" || echo "✗ MISSING polyagent/agent.py"
+          test -f polymcp/polyagent/llm_providers.py && echo "✓ polyagent/llm_providers.py" || echo "✗ MISSING polyagent/llm_providers.py"
+          
+          echo ""
+          echo "=== Checking polymcp_toolkit subpackage ==="
+          test -f polymcp/polymcp_toolkit/__init__.py && echo "✓ polymcp_toolkit/__init__.py" || echo "✗ MISSING polymcp_toolkit/__init__.py"
+          test -f polymcp/polymcp_toolkit/expose.py && echo "✓ polymcp_toolkit/expose.py" || echo "✗ MISSING polymcp_toolkit/expose.py"
+          
+          echo ""
+          echo "=== Package tree ==="
+          find polymcp -name "*.py" -type f | sort
 
       - name: Test setup.py metadata
         run: |
@@ -47,19 +69,29 @@ jobs:
       - name: Build package
         run: |
           python -m build
+          echo ""
           echo "=== dist/ contents ==="
           ls -la dist/
 
       - name: Verify wheel contents
         run: |
+          echo "=== Wheel contents ==="
           cd dist
-          unzip -l *.whl | head -20
-          echo "=== Checking for metadata ==="
-          unzip -p *.whl '*/METADATA' | head -20 || echo "METADATA not found"
+          unzip -l *.whl | grep -E "\.py$|METADATA|RECORD" | head -30
+          cd ..
+
+      - name: Extract and check metadata
+        run: |
+          cd dist
+          echo "=== Extracting metadata from wheel ==="
+          unzip -q *.whl
+          echo "=== METADATA content (first 20 lines) ==="
+          cat *.dist-info/METADATA | head -20
           cd ..
 
       - name: Check package with twine
         run: |
+          echo "=== Running twine check ==="
           twine check dist/*
 
       - name: Publish to PyPI
