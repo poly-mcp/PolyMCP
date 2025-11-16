@@ -15,7 +15,7 @@ if readme_path.exists():
 setup(
     name="polymcp",
     version="1.0.0",
-    author="PolyMCP Contributors",
+    author="PolyMCP",
     author_email="",
     description="Universal MCP Agent & Toolkit for intelligent LLM tool orchestration",
     long_description=long_description,
@@ -73,3 +73,4 @@ setup(
     },
 
 )
+
