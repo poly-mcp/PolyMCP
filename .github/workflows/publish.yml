@@ -30,57 +30,34 @@ jobs:
       - name: Generate dynamic version
         run: |
           BUILD_NUMBER=$(date +%s)
-          echo "__version__ = \"0.0.0.dev${BUILD_NUMBER}\"" > polymcp/version.py
-          echo "Generated version: 0.0.0.dev${BUILD_NUMBER}"
+          echo "__version__ = '0.0.0.dev${BUILD_NUMBER}'" > polymcp/version.py
+          echo "Generated version.py:"
           cat polymcp/version.py
 
-      - name: Verify package structure
+      - name: Verify version.py and setup.py metadata
         run: |
-          echo "=== Repository structure ==="
-          ls -la
-          echo "=== polymcp/ directory ==="
-          ls -la polymcp/
-          echo "=== Check __init__.py exists ==="
-          test -f polymcp/__init__.py && echo "__init__.py exists" || echo "__init__.py MISSING!"
-
-      - name: Test setup.py metadata
-        run: |
-          echo "=== Testing setup.py can read metadata ==="
-          python setup.py --name
+          test -f polymcp/version.py && echo "version.py OK" || echo "version.py MISSING!"
+          echo "=== setup.py metadata ==="
           python setup.py --version
+          python setup.py --name
           python setup.py --author
           python setup.py --description
 
-      - name: Build package with debug
+      - name: Build package
         run: |
-          echo "=== Building package ==="
           python -m build --no-isolation
-          echo "=== Build complete, checking dist/ ==="
+          echo "=== Build complete ==="
           ls -la dist/
 
-      - name: Verify wheel contents
+      - name: Verify wheel metadata
         run: |
-          echo "=== Checking wheel metadata ==="
           cd dist
-          # List wheel contents
           python -m zipfile -l *.whl | grep -E "(METADATA|PKG-INFO|RECORD)"
-          # Extract and show METADATA
-          unzip -p *.whl "*/METADATA" || echo "No METADATA found!"
+          unzip -p *.whl "*/METADATA"
           cd ..
 
-      - name: Check package with twine
-        run: |
-          echo "=== Running twine check ==="
-          twine check dist/* || true
-
-      - name: Final verification before publish
-        run: |
-          echo "=== Final package info ==="
-          ls -la dist/
-          for file in dist/*; do
-            echo "File: $file"
-            echo "Size: $(stat -c%s "$file") bytes"
-          done
+      - name: Twine check
+        run: twine check dist/*
 
       - name: Publish to PyPI
         if: success()
