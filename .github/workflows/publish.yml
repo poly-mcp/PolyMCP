@@ -3,7 +3,7 @@ name: Publish Python Package (PolyMCP)
 on:
   push:
     branches:
-      - main  # pubblica solo dai commit su main
+      - main
 
 permissions:
   id-token: write
@@ -14,44 +14,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ===== Checkout repository =====
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ===== Set up Python =====
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ===== Installa strumenti di build =====
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade build wheel setuptools twine pkginfo
 
-      # ===== Installa dipendenze runtime richieste dagli import in __init__.py =====
       - name: Install runtime dependencies
         run: |
           pip install fastapi pydantic requests docstring-parser
 
-      # ===== Genera versione dinamica =====
-      - name: Generate dynamic version
-        run: |
-          BUILD_NUMBER=$(date +%s)
-          echo "__version__ = '0.0.0.dev${BUILD_NUMBER}'" > polymcp/version.py
-          echo "POLYMCP_VERSION=0.0.0.dev${BUILD_NUMBER}" >> $GITHUB_ENV
-          echo "Generated version:"
-          cat polymcp/version.py
-          python -c "from polymcp.version import __version__; print('Version from version.py:', __version__)"
-
-      # ===== Verifica struttura del pacchetto =====
       - name: Verify package structure
         run: |
           test -f polymcp/__init__.py && echo "__init__.py exists" || echo "__init__.py MISSING!"
           test -f polymcp/version.py && echo "version.py exists" || echo "version.py MISSING!"
 
-      # ===== Test metadata setup.py =====
       - name: Test setup.py metadata
         run: |
           python setup.py --name
@@ -59,26 +43,22 @@ jobs:
           python setup.py --author
           python setup.py --description
 
-      # ===== Build pacchetto =====
       - name: Build package
         run: |
           python -m build --no-isolation
           echo "=== dist/ contents ==="
           ls -la dist/
 
-      # ===== Verifica contenuti wheel =====
       - name: Verify wheel contents
         run: |
           cd dist
           python -m zipfile -l *.whl | grep -E "(METADATA|PKG-INFO|RECORD)"
           cd ..
 
-      # ===== Controlla pacchetto con twine =====
       - name: Check package with twine
         run: |
           twine check dist/*
 
-      # ===== Pubblica su PyPI =====
       - name: Publish to PyPI
         if: success()
         uses: pypa/gh-action-pypi-publish@v1.10.0
