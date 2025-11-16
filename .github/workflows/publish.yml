@@ -85,5 +85,3 @@ jobs:
       - name: Publish to PyPI
         if: success()
         uses: pypa/gh-action-pypi-publish@v1.10.0
-        with:
-          verify-metadata: true
