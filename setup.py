@@ -12,9 +12,16 @@ if readme_path.exists():
     with open(readme_path, encoding="utf-8") as f:
         long_description = f.read()
 
+# Dynamic version: read from polymcp/version.py
+version_file = Path(__file__).parent / "polymcp" / "version.py"
+version = "0.0.0.dev0"
+if version_file.exists():
+    with open(version_file, "r", encoding="utf-8") as f:
+        exec(f.read())
+
 setup(
     name="polymcp",
-    version="1.0.0",
+    version=version,
     author="PolyMCP",
     author_email="",
     description="Universal MCP Agent & Toolkit for intelligent LLM tool orchestration",
@@ -71,6 +78,4 @@ setup(
         "Source": "https://github.com/llm-use/polymcp",
         "Documentation": "https://github.com/llm-use/polymcp#readme",
     },
-
 )
-
