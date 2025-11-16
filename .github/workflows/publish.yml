@@ -3,7 +3,7 @@ name: Publish Python Package (PolyMCP)
 on:
   push:
     branches:
-      - main
+      - main  # pubblica solo dai commit su main
 
 permissions:
   id-token: write
@@ -27,51 +27,48 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade build wheel setuptools twine pkginfo
 
+      # ===== Genera versione dinamica PRIMA del build =====
       - name: Generate dynamic version
         run: |
           BUILD_NUMBER=$(date +%s)
           echo "__version__ = '0.0.0.dev${BUILD_NUMBER}'" > polymcp/version.py
           echo "POLYMCP_VERSION=0.0.0.dev${BUILD_NUMBER}" >> $GITHUB_ENV
-          echo "Generated version: 0.0.0.dev${BUILD_NUMBER}"
+          echo "Generated version:"
           cat polymcp/version.py
+          python -c "from polymcp.version import __version__; print('Version from version.py:', __version__)"
 
       - name: Verify package structure
         run: |
-          echo "=== Repository structure ==="
-          ls -la
-          echo "=== polymcp/ directory ==="
-          ls -la polymcp/
-          echo "=== Check __init__.py exists ==="
           test -f polymcp/__init__.py && echo "__init__.py exists" || echo "__init__.py MISSING!"
+          test -f polymcp/version.py && echo "version.py exists" || echo "version.py MISSING!"
 
       - name: Test setup.py metadata
         run: |
-          echo "=== Testing setup.py can read metadata ==="
           python setup.py --name
           python setup.py --version
           python setup.py --author
           python setup.py --description
 
-      - name: Build package with debug
+      - name: Build package
         run: |
-          echo "=== Building package ==="
           python -m build --no-isolation
-          echo "=== Build complete, checking dist/ ==="
+          echo "=== dist/ contents ==="
           ls -la dist/
 
       - name: Verify wheel contents
         run: |
-          echo "=== Checking wheel metadata ==="
           cd dist
           python -m zipfile -l *.whl | grep -E "(METADATA|PKG-INFO|RECORD)"
-          unzip -p *.whl "*/METADATA" || echo "No METADATA found!"
           cd ..
 
       - name: Check package with twine
         run: |
-          echo "=== Running twine check ==="
           twine check dist/*
 
+      # ===== Pubblica su PyPI solo se tutto va bene =====
       - name: Publish to PyPI
         if: success()
         uses: pypa/gh-action-pypi-publish@v1.10.0
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
