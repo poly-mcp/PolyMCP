@@ -1,1 +1,2 @@
-__version__ = "0.0.0.dev0"
+# polymcp/version.py
+__version__ = "0.1.0"
