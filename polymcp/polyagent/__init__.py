@@ -1,6 +1,7 @@
 """PolyAgent - Intelligent LLM Agent"""
 from .agent import PolyAgent
-from .unified_agent import UnifiedPolyAgent 
+from .unified_agent import UnifiedPolyAgent
+from .codemode_agent import CodeModeAgent, AsyncCodeModeAgent  # 🆕 AGGIUNTO
 from .llm_providers import (
     LLMProvider,
     OpenAIProvider,
@@ -12,7 +13,9 @@ from .llm_providers import (
 
 __all__ = [
     'PolyAgent',
-    'UnifiedPolyAgent', 
+    'UnifiedPolyAgent',
+    'CodeModeAgent',        # 🆕 AGGIUNTO
+    'AsyncCodeModeAgent',   # 🆕 AGGIUNTO
     'LLMProvider',
     'OpenAIProvider',
     'AnthropicProvider',
