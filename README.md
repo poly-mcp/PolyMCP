@@ -2,6 +2,9 @@
   <img src="logo.png" alt="PolymCP Logo" width="500"/>
 </p>
 
+[![PyPI version](https://img.shields.io/pypi/v/polymcp.svg)](https://pypi.org/project/polymcp/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/polymcp.svg)](https://pypi.org/project/polymcp/)
+[![License](https://img.shields.io/pypi/l/polymcp.svg)](https://github.com/llm-use/polymcp/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/llm-use/polymcp?style=social)](https://github.com/llm-use/polymcp/stargazers)
 [![Featured Article](https://img.shields.io/badge/Read-Article-blue)](https://levelup.gitconnected.com/why-your-python-functions-arent-ai-tools-yet-and-how-polymcp-fixes-it-in-one-line-d8e62550ac53)
 
@@ -267,31 +270,33 @@ Manage MCP servers via JSON files for easy configuration.
 
 ## 📦 Installation
 
-1. **Clone the repository**
-   ```sh
-   git clone https://github.com/JustVugg/polymcp.git
-   cd polymcp
-   ```
+### Quick Install (Recommended)
 
-2. **Create a virtual environment**
-   ```sh
-   python -m venv venv
-   source venv/bin/activate  # Windows: venv\Scripts\activate
-   ```
+```bash
+pip install polymcp
+```
 
-3. **Install dependencies**
-   ```sh
-   pip install -r requirements.txt
-   pip install -e ".[dev]"
-   ```
+### Development Installation
 
----
+For contributors or advanced users who want to modify the source code:
 
-## 🧪 Testing
+```bash
+# Clone the repository
+git clone https://github.com/llm-use/polymcp.git
+cd polymcp
 
-Run all tests:
-```sh
-pytest tests/ -v
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+### Verify Installation
+
+```bash
+python -c "import polymcp; print(f'PolyMCP version: {polymcp.__version__}')"
 ```
 
 ---
