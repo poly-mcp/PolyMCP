@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polymcp"
-version = "1.0.0"  # 👈 AGGIUNGI la versione statica qui!
+version = "0.0.7" 
 description = "Universal MCP Agent & Toolkit for intelligent LLM tool orchestration"
 readme = "README.md"
 authors = [
