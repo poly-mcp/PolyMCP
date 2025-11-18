@@ -15,6 +15,103 @@
 
 ## 🎉 What's New
 
+### 🔒 **Production Authentication** - Secure Your MCP Servers
+Built-in support for API Key and JWT authentication:
+
+```python
+#!/usr/bin/env python3
+"""
+Simple Auth Test - API Key & JWT with Ollama
+Quick authentication example
+"""
+
+import os
+import asyncio
+import httpx
+from dotenv import load_dotenv
+load_dotenv()
+
+from polymcp.polyagent import UnifiedPolyAgent, OllamaProvider
+
+async def test_api_key():
+    """Test with API Key"""
+    print("\n🔑 Test API Key Authentication")
+    print("="*50)
+    
+    api_key = os.getenv("MCP_API_KEY_POLYMCP", "api_key")
+    
+    llm = OllamaProvider(model="gpt-oss:120b-cloud", temperature=0)
+    
+    agent = UnifiedPolyAgent(
+        llm_provider=llm,
+        mcp_servers=["http://localhost:8000/mcp"],
+        http_headers={"X-API-Key": api_key},
+        verbose=True
+    )
+    
+    await agent.start()
+    result = await agent.run_async("Add 42 and 58", max_steps=3)
+    await agent.stop()
+    
+    print(f"✅ Result: {result}")
+
+
+async def test_jwt():
+    """Test with JWT"""
+    print("\n🎫 Test JWT Authentication")
+    print("="*50)
+    
+    # Login to get JWT
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:8000/auth/login",
+            json={"username": "admin", "password": "admin123"}
+        )
+        token = response.json()["access_token"]
+        print(f"✅ Logged in, token: {token[:30]}...")
+    
+    llm = OllamaProvider(model="gpt-oss:120b-cloud", temperature=0)
+    
+    agent = UnifiedPolyAgent(
+        llm_provider=llm,
+        mcp_servers=["http://localhost:8000/mcp"],
+        http_headers={"Authorization": f"Bearer {token}"},
+        verbose=True
+    )
+    
+    await agent.start()
+    result = await agent.run_async("Multiply 7 by 9", max_steps=3)
+    await agent.stop()
+    
+    print(f"✅ Result: {result}")
+
+
+async def main():
+    print("\n🔐 PolyMCP Auth Test with Ollama\n")
+    
+    # Check server
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.get("http://localhost:8000/mcp")
+    except:
+        print("❌ Server not running! Start with: python auth_server.py")
+        return
+    
+    print("✅ Server is running\n")
+    
+    # Run tests
+    await test_api_key()
+    await test_jwt()
+    
+    print("\n✅ All tests completed!")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Features: JWT tokens, brute force protection, audit logs, rate limiting.
+
 ### 🚀 **Code Mode Agent** - Revolutionary Performance
 Generate Python code instead of making multiple tool calls! The new `CodeModeAgent` offers:
 - **60% faster execution** (fewer LLM roundtrips)
