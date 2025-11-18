@@ -436,6 +436,105 @@ def setup_auth_middleware(app, allowed_origins: List[str] = None):
     
     return app
 
+def add_production_auth_to_mcp(
+    base_app,
+    authenticator: ProductionAuthenticator,
+    allowed_origins: List[str] = ["*"]
+):
+    """
+    Helper to add production authentication to MCP server.
+    Wraps the base app with auth endpoints and middleware.
+    """
+    from fastapi import FastAPI, Depends, Request, HTTPException
+    
+    app = FastAPI(
+        title="Authenticated MCP Server",
+        description="MCP Server with Production Authentication",
+        version="1.0.0"
+    )
+    
+    # Setup middleware
+    app = setup_auth_middleware(app, allowed_origins)
+    
+    # Auth endpoints
+    @app.post("/auth/login")
+    async def login(request: LoginRequest, req: Request, db = Depends(get_db)):
+        return authenticator.login(request, req, db)
+    
+    @app.post("/auth/refresh")
+    async def refresh_token(request: RefreshRequest, req: Request, db = Depends(get_db)):
+        return authenticator.refresh(request, req, db)
+    
+    @app.post("/auth/logout")
+    async def logout(req: Request, auth_data = Depends(authenticator.authenticate)):
+        username, user = auth_data
+        auth_header = req.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            db = next(get_db())
+            return authenticator.logout(req, token, db)
+        return {"message": "No token to revoke"}
+    
+    # Get original endpoints
+    original_list_tools = None
+    original_invoke_tool = None
+    for route in base_app.router.routes:
+        if hasattr(route, 'path'):
+            if route.path == "/mcp/list_tools":
+                original_list_tools = route.endpoint
+            elif route.path == "/mcp/invoke/{tool_name}":
+                original_invoke_tool = route.endpoint
+    
+    # Authenticated endpoints
+    @app.get("/mcp/list_tools")
+    async def list_tools_auth(req: Request, auth_data = Depends(authenticator.authenticate)):
+        username, user = auth_data
+        result = await original_list_tools() if original_list_tools else {"tools": []}
+        result["authenticated_user"] = username
+        return result
+    
+    @app.post("/mcp/invoke/{tool_name}")
+    async def invoke_tool_auth(
+        tool_name: str,
+        req: Request,
+        payload: dict = None,
+        auth_data = Depends(authenticator.authenticate)
+    ):
+        username, user = auth_data
+        if not original_invoke_tool:
+            raise HTTPException(status_code=404, detail="Tool endpoint not found")
+        result = await original_invoke_tool(tool_name, payload)
+        result["authenticated_user"] = username
+        return result
+    
+    # Info endpoints
+    @app.get("/")
+    async def root():
+        return {
+            "name": "Authenticated MCP Server",
+            "auth_enabled": True,
+            "endpoints": {
+                "auth_info": "/auth/info",
+                "login": "/auth/login",
+                "list_tools": "/mcp/list_tools",
+                "invoke_tool": "/mcp/invoke/{tool_name}"
+            }
+        }
+    
+    @app.get("/auth/info")
+    async def auth_info():
+        return {
+            "auth_enabled": True,
+            "methods": ["api_key", "jwt"],
+            "endpoints": {"login": "/auth/login", "refresh": "/auth/refresh", "logout": "/auth/logout"}
+        }
+    
+    # Mount other routes
+    for route in base_app.router.routes:
+        if hasattr(route, 'path') and route.path not in ["/mcp/list_tools", "/mcp/invoke/{tool_name}"]:
+            app.router.routes.append(route)
+    
+    return app
 
 # CLI for user management
 def create_user(username: str, password: str, is_admin: bool = False):
@@ -474,4 +573,5 @@ if __name__ == "__main__":
             username = input("Username: ")
             password = input("Password: ")
             is_admin = input("Admin? (y/n): ").lower() == 'y'
+
             create_user(username, password, is_admin)
