@@ -19,98 +19,42 @@
 Built-in support for API Key and JWT authentication:
 
 ```python
-#!/usr/bin/env python3
-"""
-Simple Auth Test - API Key & JWT with Ollama
-Quick authentication example
-"""
+from polymcp.polymcp_toolkit import expose_tools_http
+from polymcp.polymcp_toolkit.mcp_auth import ProductionAuthenticator, add_production_auth_to_mcp
 
-import os
-import asyncio
-import httpx
-from dotenv import load_dotenv
-load_dotenv()
+# Server with authentication
+def add(a: int, b: int) -> int:
+    return a + b
 
-from polymcp.polyagent import UnifiedPolyAgent, OllamaProvider
+app = expose_tools_http(tools=[add])
+auth = ProductionAuthenticator(enforce_https=False)  # Use True in production
+app = add_production_auth_to_mcp(app, auth)
 
-async def test_api_key():
-    """Test with API Key"""
-    print("\n🔑 Test API Key Authentication")
-    print("="*50)
-    
-    api_key = os.getenv("MCP_API_KEY_POLYMCP", "api_key")
-    
-    llm = OllamaProvider(model="gpt-oss:120b-cloud", temperature=0)
-    
-    agent = UnifiedPolyAgent(
-        llm_provider=llm,
-        mcp_servers=["http://localhost:8000/mcp"],
-        http_headers={"X-API-Key": api_key},
-        verbose=True
-    )
-    
-    await agent.start()
-    result = await agent.run_async("Add 42 and 58", max_steps=3)
-    await agent.stop()
-    
-    print(f"✅ Result: {result}")
-
-
-async def test_jwt():
-    """Test with JWT"""
-    print("\n🎫 Test JWT Authentication")
-    print("="*50)
-    
-    # Login to get JWT
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "http://localhost:8000/auth/login",
-            json={"username": "admin", "password": "admin123"}
-        )
-        token = response.json()["access_token"]
-        print(f"✅ Logged in, token: {token[:30]}...")
-    
-    llm = OllamaProvider(model="gpt-oss:120b-cloud", temperature=0)
-    
-    agent = UnifiedPolyAgent(
-        llm_provider=llm,
-        mcp_servers=["http://localhost:8000/mcp"],
-        http_headers={"Authorization": f"Bearer {token}"},
-        verbose=True
-    )
-    
-    await agent.start()
-    result = await agent.run_async("Multiply 7 by 9", max_steps=3)
-    await agent.stop()
-    
-    print(f"✅ Result: {result}")
-
-
-async def main():
-    print("\n🔐 PolyMCP Auth Test with Ollama\n")
-    
-    # Check server
-    try:
-        async with httpx.AsyncClient() as client:
-            await client.get("http://localhost:8000/mcp")
-    except:
-        print("❌ Server not running! Start with: python auth_server.py")
-        return
-    
-    print("✅ Server is running\n")
-    
-    # Run tests
-    await test_api_key()
-    await test_jwt()
-    
-    print("\n✅ All tests completed!")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Run: uvicorn script:app
 ```
 
-Features: JWT tokens, brute force protection, audit logs, rate limiting.
+**Create users:**
+```bash
+# Set environment variable first
+export MCP_SECRET_KEY="your-secret-key-min-32-chars"
+python -m polymcp.polymcp_toolkit.mcp_auth create_user
+```
+
+**Client usage:**
+```python
+from polymcp.polyagent import UnifiedPolyAgent, OllamaProvider
+
+agent = UnifiedPolyAgent(
+    llm_provider=OllamaProvider(model="llama3.2"),
+    mcp_servers=["http://localhost:8000"],
+    http_headers={"X-API-Key": "sk-your-api-key-from-db"}
+)
+
+# Make authenticated requests
+result = await agent.run_async("Add 42 and 58")
+```
+
+Features: JWT tokens, API keys, user CLI, brute force protection, audit logs, rate limiting.
 
 ### 🚀 **Code Mode Agent** - Revolutionary Performance
 Generate Python code instead of making multiple tool calls! The new `CodeModeAgent` offers:
