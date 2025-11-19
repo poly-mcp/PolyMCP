@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polymcp"
-version = "1.1.3" 
+version = "1.2.0"
 description = "Universal MCP Agent & Toolkit for intelligent LLM tool orchestration"
 readme = "README.md"
 authors = [
@@ -13,7 +13,7 @@ authors = [
 license = {text = "MIT"}
 requires-python = ">=3.8"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -21,13 +21,29 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+keywords = ["mcp", "llm", "agent", "ai", "tools", "orchestration"]
+
 dependencies = [
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.5.0",
     "requests>=2.31.0",
     "docstring-parser>=0.15",
+    # CLI dependencies
+    "click>=8.1.0",
+    "rich>=13.7.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0.0",
+    "gitpython>=3.1.0",
+    "python-dotenv>=1.0.0",
+    # Auth dependencies
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +53,12 @@ all = [
     "openai>=1.10.0",
     "anthropic>=0.8.0",
 ]
+production = [
+    "sqlalchemy>=2.0.23",
+    "redis>=5.0.1",
+    "slowapi>=0.1.9",
+    "alembic>=1.12.1",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
@@ -45,16 +67,61 @@ dev = [
     "flake8>=7.0.0",
     "mypy>=1.8.0",
     "httpx>=0.26.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/llm-use/polymcp"
 Repository = "https://github.com/llm-use/polymcp"
+Documentation = "https://github.com/llm-use/polymcp#readme"
+"Bug Tracker" = "https://github.com/llm-use/polymcp/issues"
+
+[project.scripts]
+polymcp = "polymcp.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["polymcp*"]
-exclude = ["tests*", "docs*", "examples*"]
+exclude = ["tests*", "docs*", "examples*", "*.egg-info"]
 
 [tool.setuptools.package-data]
-"*" = ["*.py", "*.md", "*.txt"]
+polymcp = [
+    "cli/templates/**/*",
+    "cli/templates/**/*.py",
+    "cli/templates/**/*.json",
+    "cli/templates/**/*.md",
+    "py.typed",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=polymcp --cov-report=html --cov-report=term-missing"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
