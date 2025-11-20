@@ -231,6 +231,23 @@ def calculate(operation: str, a: float, b: float) -> float:
         (project_path / "tools" / "__init__.py").write_text("")
     
     # Create README
+    auth_section = ''
+    if with_auth:
+        auth_section = '''## Authentication
+
+```bash
+# Create user
+export MCP_SECRET_KEY="your-secret-key"
+python -m polymcp.polymcp_toolkit.mcp_auth create_user
+
+# Login
+curl -X POST http://localhost:8000/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{"username": "user", "password": "password"}'
+```
+
+'''
+    
     readme = f"""# {project_path.name}
 
 PolyMCP project created with `polymcp init`
@@ -270,8 +287,7 @@ curl -X POST http://localhost:8000/mcp/invoke/greet \\
   -d '{{"name": "World"}}'
 ```
 
-{'## Authentication\n\n```bash\n# Create user\nexport MCP_SECRET_KEY="your-secret-key"\npython -m polymcp.polymcp_toolkit.mcp_auth create_user\n\n# Login\ncurl -X POST http://localhost:8000/auth/login \\\n  -H "Content-Type: application/json" \\\n  -d \'{"username": "user", "password": "password"}\'\n```\n' if with_auth else ''}
-## Resources
+{auth_section}## Resources
 
 - [PolyMCP Documentation](https://github.com/llm-use/polymcp)
 - [MCP Protocol](https://modelcontextprotocol.io/)
