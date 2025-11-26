@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="PolymCP Logo" width="500"/>
+  <img src="poly-mcp.png" alt="PolymCP Logo" width="500"/>
 </p>
 
 [![PyPI version](https://img.shields.io/pypi/v/polymcp.svg)](https://pypi.org/project/polymcp/)
