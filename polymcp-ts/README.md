@@ -339,8 +339,6 @@ polymcp-ts/
 │   ├── version.ts          # Version info
 │   └── index.ts            # Main entry point
 ├── examples/               # Usage examples
-├── tests/                  # Test suite
-└── dist/                   # Compiled JavaScript (generated)
 ```
 
 ## Development
