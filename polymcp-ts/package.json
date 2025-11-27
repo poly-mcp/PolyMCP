@@ -1,0 +1,79 @@
+{
+  "name": "polymcp",
+  "version": "2.0.0",
+  "private": true,  
+  "description": "Production-ready TypeScript library for building MCP (Model Context Protocol) servers and agents",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -w",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"examples/**/*.ts\"",
+    "prepublishOnly": "npm run build",
+    "example:simple": "ts-node examples/simple_example.ts",
+    "example:auth": "ts-node examples/auth_example.ts",
+    "example:playwright-server": "ts-node examples/playwright_server.ts",
+    "example:ollama-agent": "ts-node examples/ollama_agent.ts",
+    "example:ollama-interactive": "ts-node examples/ollama_agent.ts --interactive",
+    "example:multi-server": "ts-node examples/multi_server_agent.ts",
+    "example:advanced-workflow": "ts-node examples/advanced_workflow.ts",
+    "test:tool-server": "ts-node examples/test_tool_server.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "agent",
+    "ai",
+    "tools",
+    "anthropic",
+    "openai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/polymcp-ts.git"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.9.0",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "axios": "^1.6.0",
+    "bcrypt": "^5.1.1",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "cross-spawn": "^7.0.6",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "openai": "^4.20.0",
+    "playwright": "^1.40.0",
+    "vm2": "^3.9.19",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.11",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.1",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
