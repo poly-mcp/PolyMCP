@@ -1,0 +1,6 @@
+{
+  "tool": "get_weather",
+  "parameters": {
+    "location": "San Francisco"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "tool": "uppercase",
+  "parameters": {
+    "text": "hello world"
+  }
+}
