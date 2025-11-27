@@ -15,6 +15,60 @@
 
 ## 🎉 What's New
 
+### PolyMCP-TS – TypeScript Implementation of PolyMCP
+
+PolyMCP now also has a **TypeScript implementation** for the Model Context Protocol (MCP), ideal for Node.js and TypeScript ecosystems.
+
+> Everything you can build with the **Python PolyMCP**, you can now also build with **TypeScript**
+
+📖 **[See the complete PolyMCP Typescript documentation →](polymcp-ts/README.md)**
+
+Key highlights:
+
+- **TypeScript-first design** – full type safety with rich typings
+- **Zod-based validation** – input schemas and runtime validation using Zod
+- **Simple tool definition API** – create MCP tools with minimal boilerplate
+- **Multiple server types** – HTTP, stdio, and in-process MCP servers
+- **Built-in authentication** – API key and JWT support out of the box
+- **Agent framework** – Code Mode Agent and Multi-Step Reasoning for orchestrating multiple MCP servers with LLMs
+- **Memory & state** – optional conversation memory and state management
+
+Quick example of a TypeScript MCP tool server:
+
+```ts
+import { z } from 'zod';
+import { tool, exposeToolsHttp } from './polymcp-ts/src';
+
+// Define tools with schema validation
+const mathTools = [
+  tool({
+    name: 'add',
+    description: 'Add two numbers',
+    inputSchema: z.object({
+      a: z.number().describe('First number'),
+      b: z.number().describe('Second number'),
+    }),
+    function: async ({ a, b }) => a + b,
+  }),
+  tool({
+    name: 'multiply',
+    description: 'Multiply two numbers',
+    inputSchema: z.object({
+      x: z.number().describe('First number'),
+      y: z.number().describe('Second number'),
+    }),
+    function: async ({ x, y }) => x * y,
+  }),
+];
+
+// Start HTTP MCP server
+const app = await exposeToolsHttp(mathTools, {
+  title: 'Math Tools Server',
+  description: 'Basic mathematical operations',
+  verbose: true,
+});
+```
+
 ### 🎮 **PolyMCP CLI** - Complete Command-Line Interface
 A powerful CLI for managing MCP servers, running agents, and orchestrating tools:
 
