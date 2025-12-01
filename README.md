@@ -469,6 +469,7 @@ MIT License
 - [Playwright MCP](https://github.com/microsoft/playwright-mcp)
 - [Blender MCP](https://github.com/llm-use/Blender-MCP-Server)
 - [IoT MCP](https://github.com/llm-use/IoT-Edge-MCP-Server)
+- [GitLab MCP](https://github.com/poly-mcp/GitLab-MCP-Server)
 
 ---
 
