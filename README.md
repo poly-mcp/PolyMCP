@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/pypi/l/polymcp.svg)](https://github.com/llm-use/polymcp/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/llm-use/polymcp?style=social)](https://github.com/llm-use/polymcp/stargazers)
 [![Featured Article](https://img.shields.io/badge/Read-Article-blue)](https://levelup.gitconnected.com/why-your-python-functions-arent-ai-tools-yet-and-how-polymcp-fixes-it-in-one-line-d8e62550ac53)
+[![Seguimi su Twitter](https://img.shields.io/twitter/follow/justvugg?style=social)](https://x.com/justvugg)
 [![PyPI total downloads](https://img.shields.io/pepy/dt/polymcp)](https://pepy.tech/project/polymcp)
 
 > **PolyMCP: A Universal MCP Agent & Toolkit for Intelligent Tool Orchestration**
