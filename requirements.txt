@@ -29,6 +29,26 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 
 # ============================================================================
+# STDIO & WASM SERVER CREATION (NEW - for cross-platform servers)
+# ============================================================================
+# Note: Stdio servers use only Python stdlib (asyncio, json, sys)
+# Note: WASM compilation uses only Python stdlib (pathlib, hashlib)
+# Pyodide is loaded in browser via CDN - no Python dependencies needed
+
+# ============================================================================
+# DOCKER SANDBOX EXECUTOR (NEW - for secure code execution)
+# ============================================================================
+docker==7.0.0
+
+# ============================================================================
+# SKILLS SYSTEM (NEW - for intelligent tool loading)
+# ============================================================================
+# Note: Basic semantic matching uses stdlib only
+# For advanced NLP/embeddings (optional):
+# sentence-transformers==2.2.2
+# numpy==1.24.3
+
+# ============================================================================
 # DATABASE & CACHE (OPTIONAL - uncomment for production auth)
 # ============================================================================
 # sqlalchemy==2.0.23
@@ -70,24 +90,39 @@ python-multipart==0.0.6
 # twine==4.0.2
 
 # ============================================================================
-# NOTES
+# PLATFORM-SPECIFIC NOTES
 # ============================================================================
-# 1. For minimal installation (core only):
+# Windows Users:
+# - Stdio servers automatically use threading mode (no extra deps)
+# - Docker Desktop for Windows required for sandbox execution
+#
+# Linux/macOS Users:
+# - Stdio servers use asyncio pipes (optimal performance)
+# - Docker Engine required for sandbox execution
+
+# ============================================================================
+# INSTALLATION PROFILES
+# ============================================================================
+# 1. Minimal installation (core only):
 #    pip install polymcp
 #
-# 2. For OpenAI support:
+# 2. With OpenAI support:
 #    pip install polymcp[openai]
 #
-# 3. For Anthropic support:
+# 3. With Anthropic support:
 #    pip install polymcp[anthropic]
 #
-# 4. For all LLM providers:
+# 4. With all LLM providers:
 #    pip install polymcp[all-llm]
 #
-# 5. For production deployment:
+# 5. For production deployment (includes Docker):
 #    pip install polymcp[production]
 #
 # 6. For development:
 #    pip install polymcp[dev]
 #
-# 7. CLI is included by default in all installations
+# 7. With Docker sandbox (secure code execution):
+#    pip install polymcp[docker]
+#
+# 8. Complete installation (all features):
+#    pip install polymcp[all]
