@@ -1,85 +1,94 @@
 """
 Init Command - Initialize new PolyMCP projects
+Crea progetti production-ready per server MCP in vari formati.
 """
 
 import click
 import json
 from pathlib import Path
-from typing import Optional
 
+
+# ============================================================================
+# COMANDO PRINCIPALE
+# ============================================================================
 
 @click.command('init')
 @click.argument('project_name')
-@click.option('--type', 'project_type', 
-              type=click.Choice(['basic', 'http-server', 'stdio-server', 'agent'], case_sensitive=False),
-              default='basic',
-              help='Type of project to create')
-@click.option('--with-auth', is_flag=True, help='Include authentication setup')
-@click.option('--with-examples', is_flag=True, help='Include example tools')
-@click.pass_context
-def init_cmd(ctx, project_name: str, project_type: str, with_auth: bool, with_examples: bool):
+@click.option(
+    '--type', 
+    'project_type',
+    type=click.Choice(['basic', 'http-server', 'stdio-server', 'wasm-server', 'agent']),
+    default='basic',
+    help='Tipo di progetto da creare'
+)
+@click.option('--with-auth', is_flag=True, help='Includere autenticazione (solo HTTP)')
+@click.option('--with-examples', is_flag=True, help='Includere tools di esempio')
+def init_cmd(project_name: str, project_type: str, with_auth: bool, with_examples: bool):
     """
-    Initialize a new PolyMCP project.
+    Inizializza un nuovo progetto PolyMCP.
     
-    Examples:
+    Esempi:
       polymcp init my-project
-      polymcp init my-server --type http-server
-      polymcp init my-agent --type agent --with-examples
+      polymcp init my-server --type http-server --with-examples
+      polymcp init my-tools --type stdio-server --with-examples
+      polymcp init my-wasm --type wasm-server --with-examples
+      polymcp init my-agent --type agent
     """
     project_path = Path(project_name)
     
+    # Verifica se directory esiste già
     if project_path.exists():
-        click.echo(f"Error: Directory '{project_name}' already exists", err=True)
+        click.echo(f"❌ Errore: La directory '{project_name}' esiste già", err=True)
         return
     
-    click.echo(f"Creating PolyMCP project: {project_name}")
-    click.echo(f"   Type: {project_type}")
+    click.echo(f"\n🚀 Creazione progetto PolyMCP: {project_name}")
+    click.echo(f"   Tipo: {project_type}")
+    if with_examples:
+        click.echo(f"   Con esempi: ✓")
+    if with_auth and project_type == 'http-server':
+        click.echo(f"   Con autenticazione: ✓")
     
-    # Create project structure
+    # Crea directory progetto
     project_path.mkdir(parents=True)
     
+    # Chiama la funzione appropriata per il tipo di progetto
     if project_type == 'basic':
         _create_basic_project(project_path, with_auth, with_examples)
+    
     elif project_type == 'http-server':
-        _create_http_server_project(project_path, with_auth, with_examples)
+        _create_http_server(project_path, with_auth, with_examples)
+    
     elif project_type == 'stdio-server':
-        _create_stdio_server_project(project_path, with_examples)
+        _create_stdio_server(project_path, with_examples)
+    
+    elif project_type == 'wasm-server':
+        _create_wasm_server(project_path, with_examples)
+    
     elif project_type == 'agent':
         _create_agent_project(project_path, with_examples)
     
-    click.echo(f"\nProject created successfully!")
-    click.echo(f"\nNext steps:")
-    click.echo(f"  cd {project_name}")
-    click.echo(f"  pip install -r requirements.txt")
-    
-    if project_type in ['http-server', 'basic']:
-        click.echo(f"  python server.py")
-    elif project_type == 'agent':
-        click.echo(f"  python agent.py")
+    # Messaggio finale con next steps
+    _show_next_steps(project_name, project_type)
 
+
+# ============================================================================
+# TIPO 1: BASIC PROJECT
+# ============================================================================
 
 def _create_basic_project(project_path: Path, with_auth: bool, with_examples: bool):
-    """Create a basic PolyMCP project."""
+    """Crea progetto basic con HTTP server."""
     
-    # Create directories
+    # Crea struttura directory
     (project_path / "tools").mkdir()
     (project_path / "tests").mkdir()
     
-    # Create requirements.txt
-    requirements = [
-        "polymcp>=1.1.3",
-        "python-dotenv>=1.0.0"
-    ]
-    
+    # 1. Requirements
+    requirements = ["polymcp>=1.1.3", "python-dotenv>=1.0.0"]
     if with_auth:
-        requirements.extend([
-            "python-jose[cryptography]>=3.3.0",
-            "passlib[bcrypt]>=1.7.4"
-        ])
-    
+        requirements.extend(["python-jose[cryptography]>=3.3.0", "passlib[bcrypt]>=1.7.4"])
     (project_path / "requirements.txt").write_text("\n".join(requirements) + "\n")
     
-    # Create .env template
+    # 2. Environment template
     env_content = """# PolyMCP Configuration
 POLYMCP_ENV=development
 POLYMCP_LOG_LEVEL=INFO
@@ -92,175 +101,123 @@ POLYMCP_LOG_LEVEL=INFO
 # MCP Servers
 MCP_SERVERS=http://localhost:8000/mcp
 """
-    
     if with_auth:
-        env_content += """\n# Authentication (generate strong key for production)
-MCP_SECRET_KEY=development-secret-key-change-in-production-min-32-chars
+        env_content += """
+# Authentication
+MCP_SECRET_KEY=development-secret-key-change-in-production
 MCP_REQUIRE_HTTPS=false
 """
-    
     (project_path / ".env.template").write_text(env_content)
     
-    # Create main server.py
-    server_code = '''#!/usr/bin/env python3
-"""
-MCP Server - Expose your tools as MCP endpoints
-"""
-
-from polymcp.polymcp_toolkit import expose_tools_http
-import uvicorn
-
-# Import your tools
-from tools.example_tools import greet, calculate
-
-
-def main():
-    """Run the MCP server."""
-    app = expose_tools_http(
-        tools=[greet, calculate],
-        title="My MCP Server",
-        description="Custom MCP tools server",
-        verbose=True
-    )
-    
-    print("\\nMCP Server starting...")
-    print("URL: http://localhost:8000")
-    print("Docs: http://localhost:8000/docs")
-    print("Tools: http://localhost:8000/mcp/list_tools\\n")
-    
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-if __name__ == "__main__":
-    main()
-'''
-    
+    # 3. Server file
     if with_auth:
         server_code = '''#!/usr/bin/env python3
-"""
-MCP Server with Authentication
-"""
-
-from polymcp.polymcp_toolkit import expose_tools_http
-from polymcp.polymcp_toolkit.mcp_auth import ProductionAuthenticator, add_production_auth_to_mcp
+from polymcp import expose_tools_http
+from polymcp.mcp_auth import ProductionAuthenticator, add_production_auth_to_mcp
 import uvicorn
 import os
 from dotenv import load_dotenv
+from tools.example_tools import greet, calculate
 
 load_dotenv()
 
-# Import your tools
-from tools.example_tools import greet, calculate
-
-
 def main():
-    """Run the authenticated MCP server."""
-    # Create base app
     app = expose_tools_http(
         tools=[greet, calculate],
         title="My Authenticated MCP Server",
         verbose=True
     )
     
-    # Add authentication
     auth = ProductionAuthenticator(
         enforce_https=os.getenv("MCP_REQUIRE_HTTPS", "false").lower() == "true"
     )
     app = add_production_auth_to_mcp(app, auth)
     
-    print("\\nAuthenticated MCP Server starting...")
-    print("URL: http://localhost:8000")
-    print("Auth: http://localhost:8000/auth/info")
-    print("Docs: http://localhost:8000/docs\\n")
-    
+    print("\\nServer: http://localhost:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
 
 if __name__ == "__main__":
     main()
 '''
+    else:
+        server_code = '''#!/usr/bin/env python3
+from polymcp import expose_tools_http
+import uvicorn
+from tools.example_tools import greet, calculate
+
+def main():
+    app = expose_tools_http(
+        tools=[greet, calculate],
+        title="My MCP Server",
+        verbose=True
+    )
     
+    print("\\nServer: http://localhost:8000")
+    print("Docs: http://localhost:8000/docs")
+    print("Tools: http://localhost:8000/mcp/list_tools\\n")
+    
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+if __name__ == "__main__":
+    main()
+'''
     (project_path / "server.py").write_text(server_code)
     (project_path / "server.py").chmod(0o755)
     
-    # Create example tools
+    # 4. Example tools
     if with_examples:
-        example_tools = '''"""
-Example Tools for MCP Server
-"""
-
+        tools_code = '''"""Example Tools"""
 
 def greet(name: str) -> str:
     """
-    Greet someone by name.
+    Saluta qualcuno per nome.
     
     Args:
-        name: The person's name
-        
+        name: Nome della persona
+    
     Returns:
-        A greeting message
+        Messaggio di saluto
     """
     return f"Hello, {name}! Welcome to PolyMCP."
 
-
 def calculate(operation: str, a: float, b: float) -> float:
     """
-    Perform basic arithmetic operations.
+    Esegue operazioni aritmetiche base.
     
     Args:
-        operation: Operation to perform (add, subtract, multiply, divide)
-        a: First number
-        b: Second number
-        
+        operation: Operazione (add, subtract, multiply, divide)
+        a: Primo numero
+        b: Secondo numero
+    
     Returns:
-        Result of the operation
+        Risultato dell'operazione
     """
-    operations = {
+    ops = {
         'add': lambda x, y: x + y,
         'subtract': lambda x, y: x - y,
         'multiply': lambda x, y: x * y,
         'divide': lambda x, y: x / y if y != 0 else float('inf')
     }
     
-    if operation not in operations:
+    if operation not in ops:
         raise ValueError(f"Unknown operation: {operation}")
     
-    return operations[operation](a, b)
+    return ops[operation](a, b)
 '''
-        (project_path / "tools" / "example_tools.py").write_text(example_tools)
+        (project_path / "tools" / "example_tools.py").write_text(tools_code)
         (project_path / "tools" / "__init__.py").write_text("")
     
-    # Create README
-    auth_section = ''
-    if with_auth:
-        auth_section = '''## Authentication
-
-```bash
-# Create user
-export MCP_SECRET_KEY="your-secret-key"
-python -m polymcp.polymcp_toolkit.mcp_auth create_user
-
-# Login
-curl -X POST http://localhost:8000/auth/login \\
-  -H "Content-Type: application/json" \\
-  -d '{"username": "user", "password": "password"}'
-```
-
-'''
-    
+    # 5. README
     readme = f"""# {project_path.name}
 
-PolyMCP project created with `polymcp init`
+Progetto PolyMCP creato con `polymcp init`
 
 ## Setup
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Copy and configure environment
 cp .env.template .env
-# Edit .env with your settings
+# Modifica .env con le tue configurazioni
 ```
 
 ## Run Server
@@ -269,62 +226,49 @@ cp .env.template .env
 python server.py
 ```
 
-## Add Your Tools
-
-1. Create new functions in `tools/`
-2. Add them to `server.py`
-3. Restart the server
-
-## Test Your Server
+## Test
 
 ```bash
 # List tools
 curl http://localhost:8000/mcp/list_tools
 
-# Invoke a tool
+# Invoke tool
 curl -X POST http://localhost:8000/mcp/invoke/greet \\
   -H "Content-Type: application/json" \\
   -d '{{"name": "World"}}'
 ```
 
-{auth_section}## Resources
+## Aggiungi Tools
 
-- [PolyMCP Documentation](https://github.com/llm-use/polymcp)
-- [MCP Protocol](https://modelcontextprotocol.io/)
+1. Crea funzioni in `tools/`
+2. Importa in `server.py`
+3. Riavvia server
 """
-    
     (project_path / "README.md").write_text(readme)
     
-    # Create .gitignore
-    gitignore = """# Python
-__pycache__/
+    # 6. .gitignore
+    gitignore = """__pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
+.venv/
 venv/
-env/
-ENV/
-
-# PolyMCP
 .env
-*.db
 *.log
-
-# IDE
-.vscode/
-.idea/
-*.swp
 """
     (project_path / ".gitignore").write_text(gitignore)
 
 
-def _create_http_server_project(project_path: Path, with_auth: bool, with_examples: bool):
-    """Create an HTTP server project - uses basic project with server focus."""
+# ============================================================================
+# TIPO 2: HTTP SERVER
+# ============================================================================
+
+def _create_http_server(project_path: Path, with_auth: bool, with_examples: bool):
+    """Crea HTTP server project (usa basic + config aggiuntive)."""
+    
+    # Crea basic project
     _create_basic_project(project_path, with_auth, with_examples)
     
-    # Add additional HTTP-specific files
-    config_content = {
+    # Aggiungi config HTTP-specific
+    config = {
         "server": {
             "host": "0.0.0.0",
             "port": 8000,
@@ -336,137 +280,117 @@ def _create_http_server_project(project_path: Path, with_auth: bool, with_exampl
             "origins": ["*"]
         }
     }
-    
-    (project_path / "config.json").write_text(json.dumps(config_content, indent=2))
+    (project_path / "config.json").write_text(json.dumps(config, indent=2))
 
 
-def _create_stdio_server_project(project_path: Path, with_examples: bool):
-    """Create a stdio server project template."""
+# ============================================================================
+# TIPO 3: STDIO SERVER (Production con expose_tools_stdio)
+# ============================================================================
+
+def _create_stdio_server(project_path: Path, with_examples: bool):
+    """Crea stdio server production-ready usando expose_tools_stdio."""
     
+    # 1. Struttura directory
     (project_path / "tools").mkdir()
     
-    # Requirements
+    # 2. Requirements
     requirements = [
         "polymcp>=1.1.3",
+        "pydantic>=2.0.0",
+        "docstring-parser>=0.16"
     ]
     (project_path / "requirements.txt").write_text("\n".join(requirements) + "\n")
     
-    # Create stdio server wrapper
+    # 3. Server Python usando expose_tools_stdio
     server_code = '''#!/usr/bin/env python3
 """
-Stdio MCP Server
+Stdio MCP Server - Production Ready
+Usa expose_tools_stdio di PolyMCP.
 """
 
-import sys
-import json
-from typing import Dict, Any
-
-# Import your tools
+from polymcp import expose_tools_stdio
 from tools.example_tools import process_text, analyze
+import sys
 
 
-class StdioMCPServer:
-    """Simple stdio MCP server implementation."""
+def main():
+    # Crea server stdio con protocollo MCP completo
+    server = expose_tools_stdio(
+        tools=[process_text, analyze],
+        server_name="My Stdio MCP Server",
+        server_version="1.0.0",
+        verbose=False  # True per debugging
+    )
     
-    def __init__(self):
-        self.tools = {
-            'process_text': process_text,
-            'analyze': analyze
-        }
+    # Log su stderr (stdout è per JSON-RPC)
+    print("✓ Stdio MCP Server ready", file=sys.stderr)
+    print(f"  Tools: process_text, analyze", file=sys.stderr)
     
-    def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle JSON-RPC request."""
-        method = request.get('method')
-        params = request.get('params', {})
-        request_id = request.get('id')
-        
-        if method == 'initialize':
-            return {
-                'jsonrpc': '2.0',
-                'id': request_id,
-                'result': {
-                    'protocolVersion': '2024-11-05',
-                    'capabilities': {'tools': {}},
-                    'serverInfo': {'name': 'stdio-mcp', 'version': '1.0.0'}
-                }
-            }
-        
-        elif method == 'tools/list':
-            tools_list = []
-            for name, func in self.tools.items():
-                tools_list.append({
-                    'name': name,
-                    'description': func.__doc__ or '',
-                    'inputSchema': {'type': 'object'}
-                })
-            
-            return {
-                'jsonrpc': '2.0',
-                'id': request_id,
-                'result': {'tools': tools_list}
-            }
-        
-        elif method == 'tools/call':
-            tool_name = params.get('name')
-            arguments = params.get('arguments', {})
-            
-            if tool_name in self.tools:
-                try:
-                    result = self.tools[tool_name](**arguments)
-                    return {
-                        'jsonrpc': '2.0',
-                        'id': request_id,
-                        'result': {'content': [{'type': 'text', 'text': str(result)}]}
-                    }
-                except Exception as e:
-                    return {
-                        'jsonrpc': '2.0',
-                        'id': request_id,
-                        'error': {'code': -32000, 'message': str(e)}
-                    }
-            else:
-                return {
-                    'jsonrpc': '2.0',
-                    'id': request_id,
-                    'error': {'code': -32601, 'message': f'Tool not found: {tool_name}'}
-                }
-        
-        return {
-            'jsonrpc': '2.0',
-            'id': request_id,
-            'error': {'code': -32601, 'message': f'Unknown method: {method}'}
-        }
-    
-    def run(self):
-        """Run the stdio server."""
-        for line in sys.stdin:
-            try:
-                request = json.loads(line)
-                response = self.handle_request(request)
-                print(json.dumps(response), flush=True)
-            except Exception as e:
-                print(json.dumps({
-                    'jsonrpc': '2.0',
-                    'error': {'code': -32700, 'message': str(e)}
-                }), flush=True)
-
-
-if __name__ == '__main__':
-    server = StdioMCPServer()
+    # Avvia server (blocca finché non viene fermato)
     server.run()
+
+
+if __name__ == "__main__":
+    main()
 '''
-    
     (project_path / "server.py").write_text(server_code)
     (project_path / "server.py").chmod(0o755)
     
+    # 4. Node.js wrapper per npm
+    index_js = '''#!/usr/bin/env node
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const server = spawn('python3', [join(__dirname, 'server.py')], {
+  stdio: ['pipe', 'pipe', 'inherit']
+});
+
+process.stdin.pipe(server.stdin);
+server.stdout.pipe(process.stdout);
+
+server.on('error', (err) => {
+  console.error('Failed to start:', err);
+  process.exit(1);
+});
+
+process.on('SIGTERM', () => server.kill('SIGTERM'));
+process.on('SIGINT', () => server.kill('SIGINT'));
+'''
+    (project_path / "index.js").write_text(index_js)
+    (project_path / "index.js").chmod(0o755)
+    
+    # 5. package.json per npm
+    package_json = {
+        "name": f"@yourusername/{project_path.name}",
+        "version": "1.0.0",
+        "description": f"{project_path.name} - MCP stdio server",
+        "type": "module",
+        "bin": {project_path.name: "./index.js"},
+        "files": ["server.py", "index.js", "tools/", "requirements.txt"],
+        "keywords": ["mcp", "model-context-protocol", "stdio"],
+        "license": "MIT"
+    }
+    (project_path / "package.json").write_text(json.dumps(package_json, indent=2))
+    
+    # 6. Example tools
     if with_examples:
-        example_tools = '''"""
-Example Tools for Stdio Server
-"""
+        tools_code = '''"""Example Tools per Stdio Server"""
+from typing import Dict, Any
 
 
 def process_text(text: str, operation: str = "uppercase") -> str:
-    """Process text with specified operation."""
+    """
+    Processa testo con operazione specificata.
+    
+    Args:
+        text: Testo da processare
+        operation: Operazione (uppercase, lowercase, reverse)
+    
+    Returns:
+        Testo processato
+    """
     if operation == "uppercase":
         return text.upper()
     elif operation == "lowercase":
@@ -476,233 +400,389 @@ def process_text(text: str, operation: str = "uppercase") -> str:
     return text
 
 
-def analyze(data: str) -> dict:
-    """Analyze input data."""
+def analyze(data: str) -> Dict[str, Any]:
+    """
+    Analizza testo e ritorna statistiche.
+    
+    Args:
+        data: Testo da analizzare
+    
+    Returns:
+        Dizionario con statistiche
+    """
+    words = data.split()
     return {
         "length": len(data),
-        "words": len(data.split()),
+        "words": len(words),
+        "unique_words": len(set(words)),
         "lines": len(data.split("\\n"))
     }
 '''
-        (project_path / "tools" / "example_tools.py").write_text(example_tools)
+        (project_path / "tools" / "example_tools.py").write_text(tools_code)
         (project_path / "tools" / "__init__.py").write_text("")
     
-    # README
+    # 7. README
     readme = f"""# {project_path.name}
 
-Stdio MCP Server
+Stdio MCP Server production-ready con PolyMCP.
 
-## Run
+## Quick Start
 
+### Python
 ```bash
+pip install -r requirements.txt
 python server.py
 ```
 
-## Test with npx
-
+### NPM
 ```bash
-echo '{{"jsonrpc":"2.0","id":1,"method":"tools/list"}}' | python server.py
+npm install
+npx @yourusername/{project_path.name}
 ```
 
-## Use with PolyMCP Agent
+## Claude Desktop
 
-```python
-agent = UnifiedPolyAgent(
-    stdio_servers=[{{
-        "command": "python",
-        "args": ["{project_path.absolute()}/server.py"]
-    }}]
-)
+Aggiungi a `claude_desktop_config.json`:
+
+```json
+{{
+  "mcpServers": {{
+    "{project_path.name}": {{
+      "command": "npx",
+      "args": ["@yourusername/{project_path.name}"]
+    }}
+  }}
+}}
+```
+
+## Pubblicare su NPM
+
+1. Modifica `package.json` con il tuo username
+2. `npm login`
+3. `npm publish --access public`
+4. Usa con: `npx @yourusername/{project_path.name}`
+
+## Test
+
+```bash
+# Initialize
+echo '{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"2024-11-05"}}}}' | python server.py
+
+# List tools
+echo '{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}' | python server.py
+
+# Call tool
+echo '{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"process_text","arguments":{{"text":"hello"}}}}}}' | python server.py
 ```
 """
     (project_path / "README.md").write_text(readme)
-
-
-def _create_agent_project(project_path: Path, with_examples: bool):
-    """Create an agent project."""
     
-    # Requirements
+    # 8. .gitignore
+    (project_path / ".gitignore").write_text("__pycache__/\n*.py[cod]\n.venv/\nvenv/\nnode_modules/\n")
+
+
+# ============================================================================
+# TIPO 4: WASM SERVER (Production con expose_tools_wasm)
+# ============================================================================
+
+def _create_wasm_server(project_path: Path, with_examples: bool):
+    """Crea WASM server production-ready usando expose_tools_wasm."""
+    
+    # 1. Struttura directory
+    (project_path / "tools").mkdir()
+    
+    # 2. Requirements
     requirements = [
         "polymcp>=1.1.3",
-        "python-dotenv>=1.0.0"
+        "pydantic>=2.0.0",
+        "docstring-parser>=0.16"
     ]
     (project_path / "requirements.txt").write_text("\n".join(requirements) + "\n")
     
-    # .env template
-    env_content = """# LLM Provider (choose one)
+    # 3. Build script usando expose_tools_wasm
+    build_code = f'''#!/usr/bin/env python3
+"""
+Build WASM MCP Server
+Compila tools Python in WebAssembly.
+"""
+
+from polymcp import expose_tools_wasm
+
+# Import tools
+try:
+    from tools.example_tools import calculate_stats, format_text
+    tools = [calculate_stats, format_text]
+except ImportError:
+    # Fallback se non ci sono tools
+    def greet(name: str) -> str:
+        """Saluta."""
+        return f"Hello, {{name}}!"
+    tools = [greet]
+
+
+def main():
+    print("\\n🚀 Building WASM MCP Server...")
+    print(f"   Tools: {{len(tools)}}")
+    
+    # Crea compiler
+    compiler = expose_tools_wasm(
+        tools=tools,
+        server_name="{project_path.name}",
+        server_version="1.0.0",
+        pyodide_version="0.26.4",
+        verbose=True
+    )
+    
+    # Compila in dist/
+    bundle = compiler.compile(output_dir="./dist")
+    
+    print("\\n✅ Build completato!")
+    print("\\nFile generati:")
+    for name, path in bundle.items():
+        print(f"  • {{name}}: {{path.name}}")
+    
+    print("\\n📖 Next Steps:")
+    print("  1. cd dist && python -m http.server 8000")
+    print("  2. Apri: http://localhost:8000/demo.html")
+    print("  3. Deploy: npm publish (da dist/)")
+
+
+if __name__ == "__main__":
+    main()
+'''
+    (project_path / "build.py").write_text(build_code)
+    (project_path / "build.py").chmod(0o755)
+    
+    # 4. Example tools
+    if with_examples:
+        tools_code = '''"""Example Tools per WASM Server"""
+from typing import List, Dict, Any
+
+
+def calculate_stats(numbers: List[float]) -> Dict[str, float]:
+    """
+    Calcola statistiche per lista di numeri.
+    
+    Args:
+        numbers: Lista di numeri
+    
+    Returns:
+        Dizionario con statistiche
+    """
+    if not numbers:
+        return {"error": "Lista vuota"}
+    
+    n = len(numbers)
+    mean = sum(numbers) / n
+    sorted_nums = sorted(numbers)
+    median = sorted_nums[n // 2] if n % 2 else (sorted_nums[n//2-1] + sorted_nums[n//2]) / 2
+    
+    return {
+        "count": n,
+        "mean": round(mean, 3),
+        "median": median,
+        "min": min(numbers),
+        "max": max(numbers)
+    }
+
+
+def format_text(text: str, format_type: str = "title") -> str:
+    """
+    Formatta testo in vari stili.
+    
+    Args:
+        text: Testo da formattare
+        format_type: Tipo (title, upper, lower, capitalize)
+    
+    Returns:
+        Testo formattato
+    """
+    formats = {
+        "title": text.title,
+        "upper": text.upper,
+        "lower": text.lower,
+        "capitalize": text.capitalize
+    }
+    return formats.get(format_type, lambda: text)()
+'''
+        (project_path / "tools" / "example_tools.py").write_text(tools_code)
+        (project_path / "tools" / "__init__.py").write_text("")
+    
+    # 5. README
+    readme = f"""# {project_path.name}
+
+WASM MCP Server production-ready con PolyMCP.
+
+## Build
+
+```bash
+pip install -r requirements.txt
+python build.py
+```
+
+## Test Locale
+
+```bash
+cd dist
+python -m http.server 8000
+```
+
+Apri: http://localhost:8000/demo.html
+
+## Deploy
+
+### GitHub Pages
+1. Push `dist/` su branch `gh-pages`
+2. Abilita GitHub Pages
+3. Accedi a: `https://username.github.io/repo/`
+
+### Vercel/Netlify
+1. Punta a folder `dist/`
+2. Build command: `python build.py`
+3. Deploy!
+
+### NPM
+```bash
+cd dist
+npm publish
+```
+
+Usa via CDN:
+```html
+<script type="module">
+  import {{ WASMMCPServer }} from 'https://unpkg.com/@username/{project_path.name}/loader.js';
+  
+  const server = new WASMMCPServer();
+  await server.initialize();
+  
+  const result = await server.callTool('calculate_stats', {{
+    numbers: [1, 2, 3, 4, 5]
+  }});
+  
+  console.log(result);
+</script>
+```
+
+## Uso Browser
+
+```html
+<script type="module">
+  import {{ WASMMCPServer }} from './dist/loader.js';
+  
+  const server = new WASMMCPServer();
+  await server.initialize();
+  
+  const {{ tools }} = await server.listTools();
+  const result = await server.callTool('format_text', {{
+    text: 'hello',
+    format_type: 'title'
+  }});
+</script>
+```
+"""
+    (project_path / "README.md").write_text(readme)
+    
+    # 6. .gitignore
+    (project_path / ".gitignore").write_text("__pycache__/\n*.py[cod]\n.venv/\nvenv/\ndist/\n")
+
+
+# ============================================================================
+# TIPO 5: AGENT PROJECT
+# ============================================================================
+
+def _create_agent_project(project_path: Path, with_examples: bool):
+    """Crea progetto agent."""
+    
+    # 1. Requirements
+    requirements = ["polymcp>=1.1.3", "python-dotenv>=1.0.0"]
+    (project_path / "requirements.txt").write_text("\n".join(requirements) + "\n")
+    
+    # 2. .env template
+    env_content = """# LLM Provider (scegline uno)
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
 # OLLAMA_BASE_URL=http://localhost:11434
 
-# MCP Servers (comma-separated)
-MCP_SERVERS=http://localhost:8000/mcp,http://localhost:8001/mcp
+# MCP Servers (separati da virgola)
+MCP_SERVERS=http://localhost:8000/mcp
 
-# Agent Configuration
+# Agent Config
 AGENT_TYPE=unified
 AGENT_VERBOSE=true
 AGENT_MAX_STEPS=10
 """
     (project_path / ".env.template").write_text(env_content)
     
-    # Agent code
+    # 3. Agent code
     agent_code = '''#!/usr/bin/env python3
-"""
-PolyMCP Agent
-"""
+"""PolyMCP Agent"""
 
 import os
 import asyncio
 from dotenv import load_dotenv
-from polymcp.polyagent import UnifiedPolyAgent, CodeModeAgent, PolyAgent
-from polymcp.polyagent.llm_providers import (
-    OpenAIProvider, AnthropicProvider, OllamaProvider
-)
+from polymcp import UnifiedAgent, CodeModeAgent, PolyAgent
+from polymcp.llm_providers import OpenAIProvider, AnthropicProvider, OllamaProvider
 
 load_dotenv()
 
 
-def create_llm_provider():
-    """Create LLM provider based on environment."""
+def create_llm():
+    """Crea LLM provider da env."""
     if os.getenv("OPENAI_API_KEY"):
         return OpenAIProvider(model="gpt-4")
     elif os.getenv("ANTHROPIC_API_KEY"):
         return AnthropicProvider(model="claude-3-5-sonnet-20241022")
     else:
-        print("Using Ollama (make sure it's running)")
-        return OllamaProvider(
-            model="llama3.2",
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        )
+        return OllamaProvider(base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
 
 
-def get_mcp_servers():
-    """Get MCP servers from environment."""
-    servers_str = os.getenv("MCP_SERVERS", "")
-    return [s.strip() for s in servers_str.split(",") if s.strip()]
-
-
-async def run_agent():
-    """Run the agent interactively."""
-    llm = create_llm_provider()
-    servers = get_mcp_servers()
+async def run():
+    """Run agent."""
+    llm = create_llm()
+    servers = [s.strip() for s in os.getenv("MCP_SERVERS", "").split(",") if s.strip()]
     
     if not servers:
-        print("No MCP servers configured in .env")
-        print("Add: MCP_SERVERS=http://localhost:8000/mcp")
+        print("❌ Nessun MCP server configurato in .env")
         return
     
     agent_type = os.getenv("AGENT_TYPE", "unified")
     verbose = os.getenv("AGENT_VERBOSE", "true").lower() == "true"
     
-    print(f"\\nStarting {agent_type.upper()} Agent")
-    print(f"MCP Servers: {len(servers)}")
-    print(f"Verbose: {verbose}\\n")
+    print(f"\\n🤖 Agent: {agent_type}")
+    print(f"   Servers: {len(servers)}")
+    print(f"   Verbose: {verbose}\\n")
     
     if agent_type == "unified":
-        agent = UnifiedPolyAgent(
-            llm_provider=llm,
-            mcp_servers=servers,
-            verbose=verbose
-        )
-        
+        agent = UnifiedAgent(llm_provider=llm, mcp_servers=servers, verbose=verbose)
         async with agent:
-            print("Agent ready! Type 'quit' to exit.\\n")
-            
+            print("Agent ready! (quit per uscire)\\n")
             while True:
                 try:
-                    user_input = input("You: ").strip()
-                    
-                    if user_input.lower() in ['quit', 'exit', 'q']:
-                        print("\\nGoodbye!")
+                    prompt = input("You: ").strip()
+                    if prompt.lower() in ['quit', 'exit', 'q']:
                         break
-                    
-                    if not user_input:
+                    if not prompt:
                         continue
                     
-                    response = await agent.run_async(user_input)
+                    response = await agent.run_async(prompt)
                     print(f"\\nAgent: {response}\\n")
                 
                 except KeyboardInterrupt:
-                    print("\\n\\nGoodbye!")
                     break
-                except Exception as e:
-                    print(f"\\nError: {e}\\n")
     
-    elif agent_type == "codemode":
-        agent = CodeModeAgent(
-            llm_provider=llm,
-            mcp_servers=servers,
-            verbose=verbose
-        )
-        
-        print("Agent ready! Type 'quit' to exit.\\n")
-        
-        while True:
-            try:
-                user_input = input("You: ").strip()
-                
-                if user_input.lower() in ['quit', 'exit', 'q']:
-                    print("\\nGoodbye!")
-                    break
-                
-                if not user_input:
-                    continue
-                
-                response = agent.run(user_input)
-                print(f"\\nAgent: {response}\\n")
-            
-            except KeyboardInterrupt:
-                print("\\n\\nGoodbye!")
-                break
-            except Exception as e:
-                print(f"\\nError: {e}\\n")
-    
-    else:  # basic agent
-        agent = PolyAgent(
-            llm_provider=llm,
-            mcp_servers=servers,
-            verbose=verbose
-        )
-        
-        print("Agent ready! Type 'quit' to exit.\\n")
-        
-        while True:
-            try:
-                user_input = input("You: ").strip()
-                
-                if user_input.lower() in ['quit', 'exit', 'q']:
-                    print("\\nGoodbye!")
-                    break
-                
-                if not user_input:
-                    continue
-                
-                response = agent.run(user_input)
-                print(f"\\nAgent: {response}\\n")
-            
-            except KeyboardInterrupt:
-                print("\\n\\nGoodbye!")
-                break
-            except Exception as e:
-                print(f"\\nError: {e}\\n")
-
-
-def main():
-    """Main entry point."""
-    try:
-        asyncio.run(run_agent())
-    except KeyboardInterrupt:
-        print("\\n\\nInterrupted by user")
+    print("\\n👋 Goodbye!")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        print("\\n👋 Interrupted")
 '''
-    
     (project_path / "agent.py").write_text(agent_code)
     (project_path / "agent.py").chmod(0o755)
     
-    # README
+    # 4. README
     readme = f"""# {project_path.name}
 
 PolyMCP Agent Project
@@ -712,42 +792,65 @@ PolyMCP Agent Project
 ```bash
 pip install -r requirements.txt
 cp .env.template .env
-# Edit .env with your settings
+# Modifica .env con le tue impostazioni
 ```
 
-## Configure MCP Servers
-
-Edit `.env` and add your MCP servers:
-
-```bash
-MCP_SERVERS=http://localhost:8000/mcp,http://localhost:8001/mcp
-```
-
-## Run Agent
+## Run
 
 ```bash
 python agent.py
 ```
 
-## Agent Types
+## Configurazione
 
-- `unified`: Autonomous multi-step reasoning (default)
-- `codemode`: Generate code to orchestrate tools
-- `basic`: Simple tool selection and execution
-
-Change in `.env`:
+Edit `.env`:
 
 ```bash
-AGENT_TYPE=unified  # or codemode, basic
+# LLM
+ANTHROPIC_API_KEY=sk-ant-...
+
+# MCP Servers
+MCP_SERVERS=http://localhost:8000/mcp,http://localhost:8001/mcp
+
+# Agent type: unified, codemode, basic
+AGENT_TYPE=unified
 ```
 """
     (project_path / "README.md").write_text(readme)
     
-    # .gitignore
-    gitignore = """__pycache__/
-*.py[cod]
-.env
-*.log
-venv/
-"""
-    (project_path / ".gitignore").write_text(gitignore)
+    # 5. .gitignore
+    (project_path / ".gitignore").write_text("__pycache__/\n*.py[cod]\n.env\n*.log\nvenv/\n")
+
+
+# ============================================================================
+# HELPER: NEXT STEPS
+# ============================================================================
+
+def _show_next_steps(project_name: str, project_type: str):
+    """Mostra next steps basati sul tipo di progetto."""
+    
+    click.echo(f"\n✅ Progetto creato con successo!")
+    click.echo(f"\n📖 Next steps:")
+    click.echo(f"  cd {project_name}")
+    click.echo(f"  pip install -r requirements.txt")
+    
+    if project_type in ['basic', 'http-server']:
+        click.echo(f"  python server.py")
+        click.echo(f"\n  → Server: http://localhost:8000")
+    
+    elif project_type == 'stdio-server':
+        click.echo(f"  python server.py")
+        click.echo(f"\n  Oppure pubblica su npm:")
+        click.echo(f"  npm publish")
+    
+    elif project_type == 'wasm-server':
+        click.echo(f"  python build.py")
+        click.echo(f"  cd dist && python -m http.server")
+        click.echo(f"\n  → Demo: http://localhost:8000/demo.html")
+    
+    elif project_type == 'agent':
+        click.echo(f"  cp .env.template .env")
+        click.echo(f"  # Modifica .env")
+        click.echo(f"  python agent.py")
+    
+    click.echo(f"\n📚 Leggi README.md per dettagli completi\n")
