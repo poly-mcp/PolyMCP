@@ -1,96 +1,141 @@
 /**
- * PolyMCP - Model Context Protocol Library for TypeScript
- * 
- * Production-ready TypeScript library for building MCP servers and agents.
+ * PolyMCP - TypeScript Implementation
+ * Model Context Protocol toolkit for building MCP servers and agents
  * 
  * @packageDocumentation
  */
 
-// Version
-export { VERSION, getVersion, isCompatible } from './version';
-import { VERSION } from './version';
-
-// Types
+// Core exports from root files
 export * from './types';
-
-// Errors (export specific to avoid conflicts)
-export {
-  PolyMCPError,
-  ToolNotFoundError,
-  ToolExecutionError,
-  ToolValidationError,
-  ServerConnectionError,
-  AuthenticationError,
-  AuthorizationError,
-  ConfigurationError,
-  ValidationError,
-  TimeoutError,
-  LLMError,
-  AgentExecutionError,
-} from './errors';
-
-// Constants
 export * from './constants';
+export * from './errors';
+export * from './version';
 
-// Agent Module
-export * from './agent';
+// Tool helpers (from toolkit)
+export * from './toolkit/tool-helpers';
 
-// Toolkit Module
-export * from './toolkit';
+// Expose modules (HTTP, In-process) - from toolkit/
+export { exposeToolsHttp, exposeToolsInprocess, InProcessMCPServer } from './toolkit/expose';
 
-// Stdio Module
-export * from './stdio';
+// NEW: Stdio Server (root level)
+export { exposeToolsStdio, StdioMCPServer } from './expose_tools_stdio';
 
-// Auth Module
-export * from './auth';
+// NEW: Dual Mode (root level)
+export { DualModeMCPServer, exposeDualMode, runDualMode } from './dual_mode_mcp';
 
-// Registry Module
-export * from './registry';
+// Client - from stdio/
+export { createMCPClient } from './stdio/client';
 
-// Validation Module
-export * from './validation';
+// NEW: Stdio Client (root level)
+export { 
+  MCPStdioClient, 
+  withStdioClient, 
+  StdioClientPool 
+} from './mcp_stdio_client';
 
-// Config Module
-export * from './config';
-
-// ============================================================================
-// Re-export commonly used items for convenience
-// ============================================================================
-
-import { tool, createToolMetadata } from './toolkit/tool-helpers';
-import { ServerRegistry, getGlobalRegistry } from './registry';
-import { ConfigManager, getGlobalConfig } from './config';
-import { AuthManager, createAuthManager } from './auth';
+// Agent - from agent/
+export {
+  PolyAgent,
+  UnifiedAgent,
+  CodeModeAgent,
+} from './agent/agent';
 
 export {
-  // Tool helpers
-  tool,
-  createToolMetadata,
-  
-  // Registry
-  ServerRegistry,
-  getGlobalRegistry,
-  
-  // Config
-  ConfigManager,
-  getGlobalConfig,
-  
-  // Auth
-  AuthManager,
-  createAuthManager,
-};
+  UnifiedAgent as UnifiedAgentClass,
+  CodeModeAgent as CodeModeAgentClass,
+} from './agent/unified_agent';
 
-// Default export
-const polymcp = {
-  VERSION,
-  tool,
-  createToolMetadata,
-  ServerRegistry,
-  getGlobalRegistry,
-  ConfigManager,
-  getGlobalConfig,
-  AuthManager,
-  createAuthManager,
-};
+export {
+  CodeModeAgent as CodeMode,
+} from './agent/codemode_agent';
 
-export default polymcp;
+// LLM Providers - from agent/
+export {
+  OpenAIProvider,
+  AnthropicProvider,
+  OllamaProvider,
+} from './agent/llm_providers';
+
+// Executor - from executor/
+export { Executor } from './executor/executor';
+
+// NEW: Docker Executor - from executor/
+export {
+  DockerSandboxExecutor,
+  executeInDocker,
+  type DockerExecutionResult,
+  type DockerExecutorOptions,
+} from './executor/docker';
+
+// Tools API - from executor/
+export { ToolsAPI } from './executor/tools_api';
+
+// NEW: Advanced Tools - from tools/
+export {
+  advancedTools,
+  fileTools,
+  webTools,
+  executionTools,
+  utilityTools,
+  webSearch,
+  executeCode,
+  readFile,
+  writeFile,
+  listDirectory,
+  shellCommand,
+  httpRequest,
+  getCurrentTime,
+} from './tools/advanced';
+
+// NEW: Skills System - from skills/
+export {
+  MCPSkillGenerator,
+  type SkillGeneratorOptions,
+} from './skills/generator';
+
+export {
+  MCPSkillLoader,
+  loadSkills,
+  loadAllSkills,
+  type LoadedSkill,
+  type SkillLoaderOptions,
+} from './skills/loader';
+
+export {
+  MCPSkillMatcher,
+  matchSkills,
+  type SkillMatch,
+  type MatchOptions,
+} from './skills/matcher';
+
+// Registry - from registry/
+export {
+  ToolRegistry,
+  MultiServerRegistry,
+} from './registry';
+
+// Validation - from validation/
+export {
+  validateToolDefinition,
+  validateToolParameters,
+} from './validation';
+
+// Configuration - from config/
+export {
+  loadConfig,
+  type PolyMCPConfig,
+} from './config';
+
+// CLI (programmatic access) - from cli/
+export { initCommand } from './cli/commands/init';
+export { testCommand } from './cli/commands/test';
+
+// Re-export commonly used types
+export type {
+  MCPTool,
+  MCPToolMetadata,
+  ToolResult,
+  LLMProvider,
+  AgentOptions,
+  ServerStats,
+} from './types';
