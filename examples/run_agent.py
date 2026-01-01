@@ -12,8 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from polyagent import PolyAgent, OpenAIProvider, OllamaProvider
-from polymcp_toolkit import expose_tools
+from polymcp import PolyAgent, OpenAIProvider, OllamaProvider, expose_tools
 from tools.summarize_tool import summarize, analyze_sentiment, word_count
 
 
@@ -111,4 +110,5 @@ def main():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+
     main()
