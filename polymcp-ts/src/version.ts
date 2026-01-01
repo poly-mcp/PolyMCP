@@ -5,7 +5,7 @@
  * The version follows Semantic Versioning (semver.org).
  */
 
-export const VERSION = '2.0.0';
+export const VERSION = '1.2.5';
 
 export const VERSION_INFO = {
   major: 2,
