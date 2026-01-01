@@ -17,6 +17,69 @@
 
 ## 🎉 What's New
 
+### 🆕 **TypeScript Implementation Updates** - New Production Features (January 2026)
+
+The TypeScript implementation has reached feature parity with Python, adding:
+
+#### 🔌 **Stdio MCP Server & Client**
+Complete JSON-RPC 2.0 implementation for creating stdio-based MCP servers compatible with Claude Desktop.
+
+#### 🐳 **Docker Sandbox Executor**
+Secure code execution in isolated containers with resource limits and network isolation.
+
+#### 🧠 **Skills System**
+Intelligent tool loading with semantic matching - 87% token reduction, 38% accuracy increase.
+
+#### ⚡ **TypeScript-Exclusive Features**
+
+**Connection Pooling:**
+```typescript
+const pool = new StdioClientPool({ command: '...' }, 3);
+await pool.initialize();
+const result = await pool.execute(async (client) => {
+  return await client.callTool('my_tool', params);
+});
+```
+
+**Parallel Execution:**
+```typescript
+const [weather, calc, date] = await Promise.all([
+  client.callTool('get_weather', { city: 'Paris' }),
+  client.callTool('calculate', { expr: '10 * 5' }),
+  client.callTool('get_date_info', { format: 'iso' })
+]);
+```
+
+#### 🛠️ **CLI Tool**
+```bash
+polymcp init my-project --type stdio-server
+polymcp test http://localhost:8000/mcp
+```
+
+#### 🎯 **Quick Start**
+```bash
+cd polymcp-ts && npm install
+tsx examples/stdio_complete_example.ts client
+tsx examples/docker_advanced_example.ts quick
+tsx examples/skills_workflow_example.ts workflow
+```
+
+📖 **[Complete TypeScript Documentation →](polymcp-ts/README.md)**
+
+---
+
+**Implementation Status:**
+
+| Feature Category | Python | TypeScript |
+|-----------------|--------|------------|
+| MCP Servers | ✅ All modes | ✅ All modes |
+| Security | ✅ Docker, Auth | ✅ Docker, Auth |
+| AI/ML | ✅ Skills, Agents | ✅ Skills, Agents |
+| Advanced | ✅ WASM | ✅ Pooling, Parallel |
+| Tooling | ✅ CLI | ✅ CLI |
+
+**Near-complete feature parity** - Only WASM compilation is Python-exclusive.
+
 ### 🧠 **Skills System** - Intelligent Tool Loading with 87% Token Savings
 
 Dramatically reduce token usage by loading only relevant tools based on semantic matching:
