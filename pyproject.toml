@@ -44,7 +44,6 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
     "python-multipart>=0.0.6",
-    "docker>=7.0.0",
 ]
 
 [project.optional-dependencies]
@@ -79,7 +78,7 @@ Documentation = "https://github.com/llm-use/polymcp#readme"
 "Bug Tracker" = "https://github.com/llm-use/polymcp/issues"
 
 [project.scripts]
-polymcp = "polymcp.cli:main"
+polymcp = "polymcp.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -92,6 +91,7 @@ polymcp = [
     "cli/templates/**/*.py",
     "cli/templates/**/*.json",
     "cli/templates/**/*.md",
+    "inspector/static/*.html",
     "py.typed",
 ]
 
