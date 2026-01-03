@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PolyMCP Inspector - Enhanced</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --font-sans: "Stack Sans Notch", "Inter", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --color-bg: #ffffff;
+      --color-text: #000000;
+      --color-border: #e5e5e5;
+      --color-hover: #f9f9f9;
+      --color-primary: #000000;
+      --color-primary-hover: #333333;
+      --color-muted: #666666;
+      --color-muted-light: #999999;
+      --color-success: #22c55e;
+      --color-error: #ef4444;
+      --color-warning: #f59e0b;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.6;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      border-bottom: 1px solid var(--color-border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--color-bg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-title { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
+    .header-status { display: flex; align-items: center; gap: 1.5rem; }
+    .status-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--color-muted); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-success); }
+    .status-dot.connecting { background: var(--color-warning); animation: pulse 2s infinite; }
+    .status-dot.error { background: var(--color-error); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    /* Main Layout */
+    .container { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 57px); }
+
+    /* Sidebar */
+    .sidebar { border-right: 1px solid var(--color-border); overflow-y: auto; background: var(--color-bg); }
+    .sidebar-section { padding: 1.5rem 1rem; border-bottom: 1px solid var(--color-border); }
+    .sidebar-title {
+      font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--color-muted); margin-bottom: 1rem;
+    }
+    .server-list { list-style: none; }
+    .server-item {
+      padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid var(--color-border);
+      border-radius: 4px; cursor: pointer; transition: all 0.2s;
+    }
+    .server-item:hover { border-color: var(--color-primary); background: var(--color-hover); }
+    .server-item.active { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
+    .server-name {
+      font-weight: 600; font-size: 0.875rem; margin-bottom: 0.25rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    }
+    .server-badge {
+      font-size: 0.625rem; padding: 0.125rem 0.375rem; background: rgba(0,0,0,0.1);
+      border-radius: 2px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .server-item.active .server-badge { background: rgba(255,255,255,0.2); }
+    .server-url {
+      font-size: 0.75rem; color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .server-item.active .server-url { color: rgba(255,255,255,0.8); }
+    .server-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .btn-sm {
+      padding: 0.25rem 0.5rem; font-size: 0.75rem; background: transparent;
+      border: 1px solid var(--color-border); border-radius: 3px; cursor: pointer;
+      transition: all 0.2s; font-family: var(--font-sans);
+    }
+    .btn-sm:hover { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
+    .server-item.active .btn-sm { border-color: rgba(255,255,255,0.3); color: var(--color-bg); }
+    .server-item.active .btn-sm:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.5); }
+    .btn-add {
+      width: 100%; padding: 0.75rem; background: var(--color-primary); color: var(--color-bg);
+      border: none; border-radius: 4px; font-size: 0.875rem; font-weight: 500; cursor: pointer;
+      transition: background 0.2s; font-family: var(--font-sans);
+    }
+    .btn-add:hover { background: var(--color-primary-hover); }
+
+    /* Main Content */
+    .main-content { display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Tabs */
+    .tabs { display: flex; border-bottom: 1px solid var(--color-border); padding: 0 2rem; background: var(--color-bg); }
+    .tab {
+      padding: 1rem 1.5rem; cursor: pointer; border-bottom: 2px solid transparent;
+      transition: all 0.2s; font-size: 0.875rem; font-weight: 500; color: var(--color-muted);
+    }
+    .tab:hover { color: var(--color-text); }
+    .tab.active { color: var(--color-text); border-bottom-color: var(--color-primary); }
+
+    /* Content Area */
+    .content-area { flex: 1; overflow-y: auto; padding: 2rem; }
+
+    /* Empty State */
+    .empty-state { text-align: center; padding: 4rem 2rem; }
+    .empty-state-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .empty-state-description { color: var(--color-muted); font-size: 0.875rem; }
+
+    /* Tools Grid */
+    .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+    .tool-card { border: 1px solid var(--color-border); border-radius: 6px; padding: 1.5rem; cursor: pointer; transition: all 0.2s; }
+    .tool-card:hover { border-color: var(--color-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .tool-name { font-family: 'Courier New', monospace; font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .tool-description { color: var(--color-muted); font-size: 0.875rem; margin-bottom: 1rem; line-height: 1.5; }
+    .tool-metrics { display: flex; gap: 1rem; font-size: 0.75rem; color: var(--color-muted-light); }
+
+    /* Test Tab */
+    .test-container { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; height: 100%; }
+    .test-panel { display: flex; flex-direction: column; }
+    .panel-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
+    .tool-selector {
+      width: 100%; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 4px;
+      font-family: var(--font-sans); font-size: 0.875rem; margin-bottom: 1rem; outline: none;
+    }
+    .code-editor {
+      flex: 1; font-family: 'Courier New', monospace; font-size: 0.875rem; padding: 1rem;
+      border: 1px solid var(--color-border); border-radius: 4px; resize: none; outline: none; background: #f9f9f9;
+    }
+    .test-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+    .btn {
+      padding: 0.75rem 1.5rem; background: transparent; border: 1px solid var(--color-border);
+      border-radius: 4px; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+      font-family: var(--font-sans);
+    }
+    .btn:hover { border-color: var(--color-primary); }
+    .btn-primary { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
+    .btn-primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .response-container { flex: 1; overflow-y: auto; }
+    .response-content {
+      font-family: 'Courier New', monospace; font-size: 0.875rem; padding: 1rem;
+      border: 1px solid var(--color-border); border-radius: 4px; background: #f9f9f9; white-space: pre-wrap;
+    }
+    .response-content.success { border-color: var(--color-success); background: rgba(34,197,94,0.05); }
+    .response-content.error { border-color: var(--color-error); background: rgba(239,68,68,0.05); }
+
+    /* Metrics */
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .metric-card { border: 1px solid var(--color-border); border-radius: 6px; padding: 1.5rem; }
+    .metric-value { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .metric-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); }
+
+    /* Logs */
+    .logs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .log-list { border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; }
+    .log-entry { display: flex; gap: 1rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--color-border); font-size: 0.875rem; align-items: center; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry:hover { background: var(--color-hover); }
+    .log-timestamp { color: var(--color-muted-light); min-width: 80px; }
+    .log-method { color: var(--color-text); font-weight: 600; min-width: 120px; }
+    .log-status { padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: 500; min-width: 50px; text-align: center; }
+    .log-status.success { background: rgba(34,197,94,0.1); color: var(--color-success); }
+    .log-status.error { background: rgba(239,68,68,0.1); color: var(--color-error); }
+    .log-duration { color: var(--color-muted-light); min-width: 60px; }
+
+    /* Resources */
+    .resources-container { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; height: 100%; }
+    .resources-list { overflow-y: auto; }
+    .resource-item { padding: 1rem; border: 1px solid var(--color-border); border-radius: 4px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s; }
+    .resource-item:hover { border-color: var(--color-primary); background: var(--color-hover); }
+    .resource-item.active { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
+    .resource-uri { font-family: 'Courier New', monospace; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .resource-name { font-size: 0.875rem; margin-bottom: 0.25rem; }
+    .resource-description { font-size: 0.75rem; color: var(--color-muted); }
+    .resource-item.active .resource-description { color: rgba(255,255,255,0.7); }
+    .resource-preview { border-left: 1px solid var(--color-border); padding-left: 2rem; overflow-y: auto; }
+    .resource-content { background: #f9f9f9; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    .resource-content pre { font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; }
+
+    /* Prompts */
+    .prompts-container { display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; height: 100%; }
+    .prompts-list { overflow-y: auto; }
+    .prompt-item { padding: 1rem; border: 1px solid var(--color-border); border-radius: 4px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s; }
+    .prompt-item:hover { border-color: var(--color-primary); background: var(--color-hover); }
+    .prompt-item.active { background: var(--color-primary); color: var(--color-bg); border-color: var(--color-primary); }
+    .prompt-name { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.25rem; }
+    .prompt-description { font-size: 0.75rem; color: var(--color-muted); }
+    .prompt-item.active .prompt-description { color: rgba(255,255,255,0.7); }
+    .prompt-args { font-size: 0.75rem; color: var(--color-muted-light); margin-top: 0.5rem; }
+    .prompt-editor { overflow-y: auto; }
+    .prompt-result { margin-top: 1rem; background: #f9f9f9; padding: 1rem; border-radius: 4px; border: 1px solid var(--color-border); }
+    .prompt-result pre { font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; }
+
+    /* Test Suites */
+    .test-suites-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .test-suite-card { border: 1px solid var(--color-border); border-radius: 6px; padding: 1.5rem; margin-bottom: 1rem; }
+    .test-suite-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem; }
+    .test-suite-name { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .test-suite-description { color: var(--color-muted); font-size: 0.875rem; }
+    .test-suite-actions { display: flex; gap: 0.5rem; }
+    .test-suite-info { display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--color-muted); }
+    .test-results { margin-top: 1rem; padding: 1rem; background: #f9f9f9; border-radius: 4px; }
+    .test-result-item { padding: 0.5rem; margin-bottom: 0.5rem; border-left: 3px solid var(--color-border); padding-left: 1rem; }
+    .test-result-item.passed { border-left-color: var(--color-success); }
+    .test-result-item.failed { border-left-color: var(--color-error); }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal { background: var(--color-bg); border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .modal-header { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; }
+    .modal-body { margin-bottom: 1.5rem; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 0.5rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--color-text); }
+    .form-input {
+      width: 100%; padding: 0.75rem; border: 1px solid var(--color-border);
+      border-radius: 4px; font-size: 0.875rem; font-family: var(--font-sans); outline: none;
+    }
+    .form-input:focus { border-color: var(--color-primary); }
+    .form-select {
+      width: 100%; padding: 0.75rem; border: 1px solid var(--color-border);
+      border-radius: 4px; font-size: 0.875rem; font-family: var(--font-sans); outline: none; background: var(--color-bg);
+    }
+    .form-textarea {
+      width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid var(--color-border);
+      border-radius: 4px; font-size: 0.875rem; font-family: 'Courier New', monospace; outline: none; resize: vertical;
+    }
+    .loading { text-align: center; padding: 2rem; color: var(--color-muted); }
+    .error-message { color: var(--color-error); font-size: 0.875rem; margin-top: 0.5rem; }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <!-- React -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Header Component
+    function Header({ connected, servers, metrics }) {
+      return (
+        <div className="header">
+          <div className="header-title">PolyMCP Inspector</div>
+          <div className="header-status">
+            <div className="status-item">
+              <div className={`status-dot ${connected ? '' : 'connecting'}`}></div>
+              <span>{connected ? 'Connected' : 'Connecting...'}</span>
+            </div>
+            <div className="status-item">
+              <span>{servers.length} servers</span>
+            </div>
+            <div className="status-item">
+              <span>{metrics.total_tools || 0} tools</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Sidebar Component
+    function Sidebar({ servers, activeServerId, onSelectServer, onAddServer, onRemoveServer, onGenerateSkill }) {
+      return (
+        <div className="sidebar">
+          <div className="sidebar-section">
+            <div className="sidebar-title">Servers</div>
+            <ul className="server-list">
+              {servers.map(server => (
+                <li
+                  key={server.id}
+                  className={`server-item ${activeServerId === server.id ? 'active' : ''}`}
+                  onClick={() => onSelectServer(server.id)}
+                >
+                  <div className="server-name">
+                    <span>{server.name}</span>
+                    <span className="server-badge">{server.type}</span>
+                  </div>
+                  <div className="server-url">
+                    {server.url || server.command || ''}
+                  </div>
+                  <div className="server-actions" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="btn-sm"
+                      onClick={() => onGenerateSkill(server.id)}
+                      title="Generate Claude Skill"
+                    >
+                      Generate Skill
+                    </button>
+                    <button
+                      className="btn-sm"
+                      onClick={() => onRemoveServer(server)}
+                      title="Remove server"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <button className="btn-add" onClick={onAddServer}>
+              Add Server
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Tabs Component
+    function Tabs({ activeTab, onTabChange }) {
+      const tabs = [
+        { id: 'tools', label: 'Tools' },
+        { id: 'test', label: 'Test' },
+        { id: 'resources', label: 'Resources' },
+        { id: 'prompts', label: 'Prompts' },
+        { id: 'test-suites', label: 'Test Suites' },
+        { id: 'metrics', label: 'Metrics' },
+        { id: 'logs', label: 'Logs' }
+      ];
+
+      return (
+        <div className="tabs">
+          {tabs.map(tab => (
+            <div
+              key={tab.id}
+              className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => onTabChange(tab.id)}
+            >
+              {tab.label}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Tools Tab Component
+    function ToolsTab({ tools, onSelectTool }) {
+      if (tools.length === 0) {
+        return (
+          <div className="empty-state">
+            <div className="empty-state-title">No tools found</div>
+            <div className="empty-state-description">Select a server to view its tools</div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="tools-grid">
+          {tools.map(tool => (
+            <div key={tool.name} className="tool-card" onClick={() => onSelectTool(tool)}>
+              <div className="tool-name">{tool.name}</div>
+              <div className="tool-description">{tool.description || 'No description'}</div>
+              {tool.metrics && (
+                <div className="tool-metrics">
+                  <div className="tool-metric">Calls: {tool.metrics.calls}</div>
+                  <div className="tool-metric">Avg: {tool.metrics.avg_time.toFixed(0)}ms</div>
+                  <div className="tool-metric">Success: {tool.metrics.success_count}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Test Tab Component
+    function TestTab({ tools, selectedTool, onSelectTool, requestParams, onRequestChange, response, executing, onExecute }) {
+      return (
+        <div className="test-container">
+          <div className="test-panel">
+            <div className="panel-title">Request</div>
+            <select
+              className="tool-selector"
+              value={selectedTool?.name || ''}
+              onChange={(e) => {
+                const tool = tools.find(t => t.name === e.target.value);
+                onSelectTool(tool);
+              }}
+            >
+              <option value="">Select a tool...</option>
+              {tools.map(tool => (
+                <option key={tool.name} value={tool.name}>{tool.name}</option>
+              ))}
+            </select>
+
+            <textarea
+              className="code-editor"
+              value={requestParams}
+              onChange={(e) => onRequestChange(e.target.value)}
+              placeholder="Enter JSON parameters..."
+            />
+
+            <div className="test-actions">
+              <button className="btn btn-primary" onClick={onExecute} disabled={!selectedTool || executing}>
+                {executing ? 'Executing...' : 'Execute'}
+              </button>
+              <button className="btn" onClick={() => onRequestChange('{}')}>Clear</button>
+            </div>
+          </div>
+
+          <div className="test-panel">
+            <div className="panel-title">Response</div>
+            <div className="response-container">
+              {response ? (
+                <pre className={`response-content ${response.status}`}>
+                  {JSON.stringify(response, null, 2)}
+                </pre>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-state-description">Execute a tool to see the response</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Resources Tab Component
+    function ResourcesTab({ serverId }) {
+      const [resources, setResources] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [selectedResource, setSelectedResource] = useState(null);
+      const [resourceContent, setResourceContent] = useState(null);
+      const [loadingContent, setLoadingContent] = useState(false);
+
+      useEffect(() => {
+        if (serverId) loadResources();
+      }, [serverId]);
+
+      async function loadResources() {
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/servers/${serverId}/resources`);
+          const data = await res.json();
+          setResources(data.resources || []);
+        } catch (err) {
+          console.error('Failed to load resources:', err);
+          setResources([]);
+        }
+        setLoading(false);
+      }
+
+      async function readResource(uri) {
+        setLoadingContent(true);
+        try {
+          const res = await fetch(`/api/servers/${serverId}/resources/read`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uri })
+          });
+          const data = await res.json();
+          setResourceContent(data);
+          setSelectedResource(uri);
+        } catch (err) {
+          console.error('Failed to read resource:', err);
+          setResourceContent({ status: 'error', error: err.message });
+        }
+        setLoadingContent(false);
+      }
+
+      if (loading) return <div className="loading">Loading resources...</div>;
+
+      if (resources.length === 0) {
+        return (
+          <div className="empty-state">
+            <div className="empty-state-title">No resources found</div>
+            <div className="empty-state-description">This server doesn't expose any resources</div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="resources-container">
+          <div className="resources-list">
+            <h3 style={{ marginBottom: '1rem' }}>Available Resources</h3>
+            {resources.map(resource => (
+              <div
+                key={resource.uri}
+                className={`resource-item ${selectedResource === resource.uri ? 'active' : ''}`}
+                onClick={() => readResource(resource.uri)}
+              >
+                <div className="resource-uri">{resource.uri}</div>
+                {resource.name && <div className="resource-name">{resource.name}</div>}
+                {resource.description && <div className="resource-description">{resource.description}</div>}
+              </div>
+            ))}
+          </div>
+
+          <div className="resource-preview">
+            {loadingContent ? (
+              <div className="loading">Loading content...</div>
+            ) : resourceContent ? (
+              <div>
+                <h3 style={{ marginBottom: '1rem' }}>Content: {selectedResource}</h3>
+                <div className="resource-content">
+                  {resourceContent.status === 'success' ? (
+                    <pre>{JSON.stringify(resourceContent.contents, null, 2)}</pre>
+                  ) : (
+                    <div className="error-message">{resourceContent.error}</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">Select a resource to view its content</div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Prompts Tab Component
+    function PromptsTab({ serverId }) {
+      const [prompts, setPrompts] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [selectedPrompt, setSelectedPrompt] = useState(null);
+      const [promptArgs, setPromptArgs] = useState({});
+      const [renderedPrompt, setRenderedPrompt] = useState(null);
+      const [rendering, setRendering] = useState(false);
+
+      useEffect(() => {
+        if (serverId) loadPrompts();
+      }, [serverId]);
+
+      async function loadPrompts() {
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/servers/${serverId}/prompts`);
+          const data = await res.json();
+          setPrompts(data.prompts || []);
+        } catch (err) {
+          console.error('Failed to load prompts:', err);
+          setPrompts([]);
+        }
+        setLoading(false);
+      }
+
+      async function renderPrompt() {
+        if (!selectedPrompt) return;
+        setRendering(true);
+        try {
+          const res = await fetch(`/api/servers/${serverId}/prompts/get`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt_name: selectedPrompt.name,
+              arguments: promptArgs
+            })
+          });
+          const data = await res.json();
+          setRenderedPrompt(data);
+        } catch (err) {
+          console.error('Failed to render prompt:', err);
+          setRenderedPrompt({ status: 'error', error: err.message });
+        }
+        setRendering(false);
+      }
+
+      if (loading) return <div className="loading">Loading prompts...</div>;
+
+      if (prompts.length === 0) {
+        return (
+          <div className="empty-state">
+            <div className="empty-state-title">No prompts found</div>
+            <div className="empty-state-description">This server doesn't expose any prompts</div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="prompts-container">
+          <div className="prompts-list">
+            <h3 style={{ marginBottom: '1rem' }}>Available Prompts</h3>
+            {prompts.map(prompt => (
+              <div
+                key={prompt.name}
+                className={`prompt-item ${selectedPrompt?.name === prompt.name ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedPrompt(prompt);
+                  setPromptArgs({});
+                  setRenderedPrompt(null);
+                }}
+              >
+                <div className="prompt-name">{prompt.name}</div>
+                <div className="prompt-description">{prompt.description || 'No description'}</div>
+                {prompt.arguments && prompt.arguments.length > 0 && (
+                  <div className="prompt-args">
+                    Args: {prompt.arguments.map(a => a.name).join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {selectedPrompt && (
+            <div className="prompt-editor">
+              <h3 style={{ marginBottom: '1rem' }}>{selectedPrompt.name}</h3>
+
+              {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  {selectedPrompt.arguments.map(arg => (
+                    <div key={arg.name} className="form-group">
+                      <label className="form-label">{arg.name}</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={arg.description || ''}
+                        value={promptArgs[arg.name] || ''}
+                        onChange={(e) => setPromptArgs({ ...promptArgs, [arg.name]: e.target.value })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button className="btn btn-primary" onClick={renderPrompt} disabled={rendering}>
+                {rendering ? 'Rendering...' : 'Render Prompt'}
+              </button>
+
+              {renderedPrompt && (
+                <div className="prompt-result">
+                  {renderedPrompt.status === 'success' ? (
+                    <pre>{JSON.stringify(renderedPrompt, null, 2)}</pre>
+                  ) : (
+                    <div className="error-message">{renderedPrompt.error}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Test Suites Tab Component
+    function TestSuitesTab({ servers, activeServerId }) {
+      const [testSuites, setTestSuites] = useState([]);
+      const [showCreate, setShowCreate] = useState(false);
+      const [runningResults, setRunningResults] = useState({});
+
+      useEffect(() => { loadTestSuites(); }, []);
+
+      async function loadTestSuites() {
+        try {
+          const res = await fetch('/api/test-suites');
+          const data = await res.json();
+          setTestSuites(data.suites || []);
+        } catch (err) {
+          console.error('Failed to load test suites:', err);
+          setTestSuites([]);
+        }
+      }
+
+      async function runSuite(suiteId) {
+        try {
+          setRunningResults(prev => ({ ...prev, [suiteId]: { running: true } }));
+          const res = await fetch(`/api/test-suites/${suiteId}/run`, { method: 'POST' });
+          const data = await res.json();
+          setRunningResults(prev => ({ ...prev, [suiteId]: data }));
+          loadTestSuites();
+        } catch (err) {
+          console.error('Failed to run suite:', err);
+          setRunningResults(prev => ({ ...prev, [suiteId]: { status: 'error', error: err.message } }));
+        }
+      }
+
+      async function deleteSuite(suiteId) {
+        if (!confirm('Delete this test suite?')) return;
+        try {
+          await fetch(`/api/test-suites/${suiteId}`, { method: 'DELETE' });
+          loadTestSuites();
+        } catch (err) {
+          console.error('Failed to delete suite:', err);
+        }
+      }
+
+      return (
+        <div>
+          <div className="test-suites-header">
+            <h2>Test Suites</h2>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              Create Test Suite
+            </button>
+          </div>
+
+          {testSuites.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-title">No test suites</div>
+              <div className="empty-state-description">Create a test suite to run automated tests</div>
+            </div>
+          ) : (
+            testSuites.map(suite => (
+              <div key={suite.id} className="test-suite-card">
+                <div className="test-suite-header">
+                  <div>
+                    <div className="test-suite-name">{suite.name}</div>
+                    <div className="test-suite-description">{suite.description}</div>
+                  </div>
+                  <div className="test-suite-actions">
+                    <button
+                      className="btn"
+                      onClick={() => runSuite(suite.id)}
+                      disabled={runningResults[suite.id]?.running}
+                    >
+                      {runningResults[suite.id]?.running ? 'Running...' : 'Run'}
+                    </button>
+                    <button className="btn" onClick={() => deleteSuite(suite.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                <div className="test-suite-info">
+                  <span>{suite.test_cases?.length || 0} tests</span>
+                  {suite.last_run && <span>Last run: {new Date(suite.last_run).toLocaleString()}</span>}
+                </div>
+
+                {runningResults[suite.id] && !runningResults[suite.id].running && (
+                  <div className="test-results">
+                    <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>
+                      Results: {runningResults[suite.id].passed}/{runningResults[suite.id].total} passed
+                    </div>
+                    {runningResults[suite.id].results?.map((result, idx) => (
+                      <div key={idx} className={`test-result-item ${result.passed ? 'passed' : 'failed'}`}>
+                        <div style={{ fontWeight: 600 }}>
+                          {result.passed ? '✓' : '✗'} {result.test_name}
+                        </div>
+                        {result.error && <div className="error-message">{result.error}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+
+          {showCreate && (
+            <CreateTestSuiteModal
+              servers={servers}
+              onClose={() => setShowCreate(false)}
+              onCreated={() => {
+                setShowCreate(false);
+                loadTestSuites();
+              }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // Metrics Tab Component
+    function MetricsTab({ metrics, servers }) {
+      async function exportMetrics(format) {
+        try {
+          const res = await fetch(`/api/export/metrics?format=${format}`);
+          const content = await res.text();
+
+          const blob = new Blob([content], {
+            type: format === 'json' ? 'application/json' :
+              format === 'markdown' ? 'text/markdown' : 'text/html'
+          });
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `inspector_report_${Date.now()}.${format === 'json' ? 'json' : format === 'markdown' ? 'md' : 'html'}`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error('Failed to export metrics:', err);
+          alert('Failed to export metrics: ' + err.message);
+        }
+      }
+
+      return (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+            <h2>Metrics</h2>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn" onClick={() => exportMetrics('json')}>Export JSON</button>
+              <button className="btn" onClick={() => exportMetrics('markdown')}>Export Markdown</button>
+              <button className="btn" onClick={() => exportMetrics('html')}>Export HTML</button>
+            </div>
+          </div>
+
+          <div className="metrics-grid">
+            <div className="metric-card">
+              <div className="metric-value">{metrics.total_calls || 0}</div>
+              <div className="metric-label">Total Requests</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-value">{(metrics.avg_time || 0).toFixed(1)}ms</div>
+              <div className="metric-label">Avg Response Time</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-value">{(metrics.success_rate || 0).toFixed(1)}%</div>
+              <div className="metric-label">Success Rate</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-value">{metrics.active_servers}/{metrics.total_servers}</div>
+              <div className="metric-label">Active Servers</div>
+            </div>
+          </div>
+
+          {servers.length > 0 && (
+            <div>
+              <h3 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Servers</h3>
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {servers.map(server => (
+                  <div key={server.id} style={{
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '6px',
+                    padding: '1rem'
+                  }}>
+                    <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>{server.name}</div>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--color-muted)' }}>
+                      {server.type} • {server.tools_count} tools • {server.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Logs Tab Component
+    function LogsTab({ logs, onRefresh }) {
+      return (
+        <div>
+          <div className="logs-header">
+            <h2>Activity Logs</h2>
+            <button className="btn" onClick={onRefresh}>Refresh</button>
+          </div>
+
+          {logs.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-title">No activity yet</div>
+              <div className="empty-state-description">Logs will appear as you use the inspector</div>
+            </div>
+          ) : (
+            <div className="log-list">
+              {logs.map((log, idx) => (
+                <div key={idx} className="log-entry">
+                  <div className="log-timestamp">{new Date(log.timestamp).toLocaleTimeString()}</div>
+                  <div className="log-method">{log.method}</div>
+                  <div className={`log-status ${log.status === 200 ? 'success' : 'error'}`}>{log.status}</div>
+                  <div className="log-duration">{Number(log.duration || 0).toFixed(0)}ms</div>
+                  {log.tool_name && <div style={{ flex: 1, color: 'var(--color-muted)' }}>{log.tool_name}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Add Server Modal
+    function AddServerModal({ onClose, onAdd }) {
+      const [serverType, setServerType] = useState('http');
+      const [name, setName] = useState('');
+      const [url, setUrl] = useState('');
+      const [command, setCommand] = useState('');
+      const [args, setArgs] = useState('');
+
+      async function handleSubmit() {
+        const config = {
+          type: serverType,
+          name: name || 'Unnamed Server',
+          id: (name || '').toLowerCase().replace(/\s+/g, '_') || 'server_' + Date.now()
+        };
+
+        if (serverType === 'http') {
+          config.url = url;
+        } else {
+          config.command = command;
+          config.args = args.split(' ').filter(a => a.trim());
+        }
+
+        await onAdd(config);
+      }
+
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">Add Server</div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Server Type</label>
+                <select className="form-select" value={serverType} onChange={(e) => setServerType(e.target.value)}>
+                  <option value="http">HTTP</option>
+                  <option value="stdio">Stdio</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="My Server" />
+              </div>
+
+              {serverType === 'http' ? (
+                <div className="form-group">
+                  <label className="form-label">URL</label>
+                  <input className="form-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://localhost:8000/mcp" />
+                </div>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Command</label>
+                    <input className="form-input" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Arguments</label>
+                    <input className="form-input" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="@playwright/mcp@latest" />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSubmit}>Add Server</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ✅ MANCAVA: Create Test Suite Modal (questo rende "funzionante" la parte Test Suites)
+    function CreateTestSuiteModal({ servers, onClose, onCreated }) {
+      const [name, setName] = useState('');
+      const [description, setDescription] = useState('');
+      const [testName, setTestName] = useState('');
+      const [serverId, setServerId] = useState('');
+      const [toolName, setToolName] = useState('');
+      const [parameters, setParameters] = useState('{}');
+      const [testCases, setTestCases] = useState([]);
+
+      function addTestCase() {
+        if (!testName || !serverId || !toolName) {
+          alert('Please fill all fields');
+          return;
+        }
+        try {
+          const params = JSON.parse(parameters);
+          setTestCases(prev => ([
+            ...prev,
+            { name: testName, server_id: serverId, tool_name: toolName, parameters: params, expected_status: 'success' }
+          ]));
+          setTestName('');
+          setToolName('');
+          setParameters('{}');
+        } catch (err) {
+          alert('Invalid JSON parameters');
+        }
+      }
+
+      async function createSuite() {
+        if (!name || testCases.length === 0) {
+          alert('Please provide name and at least one test case');
+          return;
+        }
+        try {
+          await fetch('/api/test-suites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description, test_cases: testCases })
+          });
+          onCreated();
+        } catch (err) {
+          alert('Failed to create test suite: ' + err.message);
+        }
+      }
+
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">Create Test Suite</div>
+
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Suite Name</label>
+                <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="My Test Suite" />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Description</label>
+                <textarea className="form-textarea" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Test suite description..." />
+              </div>
+
+              <h4 style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>Test Cases ({testCases.length})</h4>
+
+              <div className="form-group">
+                <label className="form-label">Test Name</label>
+                <input className="form-input" value={testName} onChange={(e) => setTestName(e.target.value)} placeholder="Test read file" />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Server</label>
+                <select className="form-select" value={serverId} onChange={(e) => setServerId(e.target.value)}>
+                  <option value="">Select server...</option>
+                  {servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Tool Name</label>
+                <input className="form-input" value={toolName} onChange={(e) => setToolName(e.target.value)} placeholder="read_file" />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Parameters (JSON)</label>
+                <textarea className="form-textarea" value={parameters} onChange={(e) => setParameters(e.target.value)} placeholder='{"path": "/example.txt"}' />
+              </div>
+
+              <button className="btn" onClick={addTestCase}>Add Test Case</button>
+
+              {testCases.length > 0 && (
+                <div style={{ marginTop: '1rem', padding: '1rem', background: '#f9f9f9', borderRadius: '4px' }}>
+                  {testCases.map((tc, idx) => (
+                    <div key={idx} style={{ marginBottom: '0.5rem' }}>
+                      {idx + 1}. {tc.name} ({tc.tool_name})
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={createSuite}>Create Suite</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Main App Component
+    function InspectorApp() {
+      const [servers, setServers] = useState([]);
+      const [activeServerId, setActiveServerId] = useState(null);
+      const [activeTab, setActiveTab] = useState('tools');
+      const [tools, setTools] = useState([]);
+      const [selectedTool, setSelectedTool] = useState(null);
+      const [requestParams, setRequestParams] = useState('{}');
+      const [response, setResponse] = useState(null);
+      const [executing, setExecuting] = useState(false);
+      const [metrics, setMetrics] = useState({});
+      const [logs, setLogs] = useState([]);
+      const [showAddServer, setShowAddServer] = useState(false);
+      const [showRemoveServer, setShowRemoveServer] = useState(false);
+      const [serverToRemove, setServerToRemove] = useState(null);
+      const [connected, setConnected] = useState(false);
+
+      const wsRef = useRef(null);
+
+      useEffect(() => {
+        connectWebSocket();
+        loadMetrics();
+        loadLogs();
+        return () => { if (wsRef.current) wsRef.current.close(); };
+      }, []);
+
+      useEffect(() => {
+        if (activeServerId) loadTools(activeServerId);
+      }, [activeServerId]);
+
+      function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+        ws.onopen = () => setConnected(true);
+        ws.onmessage = (event) => handleWebSocketMessage(JSON.parse(event.data));
+        ws.onerror = (error) => console.error('WebSocket error:', error);
+        ws.onclose = () => {
+          setConnected(false);
+          setTimeout(connectWebSocket, 3000);
+        };
+
+        wsRef.current = ws;
+      }
+
+      function handleWebSocketMessage(data) {
+        switch (data.type) {
+          case 'initial_state':
+            setServers(data.data.servers || []);
+            setMetrics(data.data.metrics || {});
+            if ((data.data.servers || []).length > 0 && !activeServerId) {
+              setActiveServerId(data.data.servers[0].id);
+            }
+            break;
+          case 'server_added':
+            setServers(prev => [...prev, data.data]);
+            if (!activeServerId) setActiveServerId(data.data.id);
+            break;
+          case 'server_removed':
+            setServers(prev => prev.filter(s => s.id !== data.data.server_id));
+            if (activeServerId === data.data.server_id) setActiveServerId(null);
+            break;
+case 'tool_executed':
+case 'resource_read':
+    loadLogs();
+    loadMetrics();
+    if (activeServerId) loadTools(activeServerId); 
+    break;
+        }
+      }
+
+      async function loadTools(serverId) {
+        try {
+          const res = await fetch(`/api/servers/${serverId}/tools`);
+          const data = await res.json();
+          setTools(data.tools || []);
+        } catch (err) {
+          console.error('Failed to load tools:', err);
+          setTools([]);
+        }
+      }
+
+      async function loadMetrics() {
+        try {
+          const res = await fetch('/api/metrics');
+          const data = await res.json();
+          setMetrics(data || {});
+        } catch (err) {
+          console.error('Failed to load metrics:', err);
+        }
+      }
+
+      async function loadLogs() {
+        try {
+          const res = await fetch('/api/logs?limit=50');
+          const data = await res.json();
+          setLogs(data.logs || []);
+        } catch (err) {
+          console.error('Failed to load logs:', err);
+          setLogs([]);
+        }
+      }
+
+      async function executeTool() {
+        if (!selectedTool || !activeServerId) return;
+        setExecuting(true);
+        setResponse(null);
+        if (activeServerId) loadTools(activeServerId);
+        loadMetrics();
+        loadLogs();
+        try {
+          const params = JSON.parse(requestParams);
+          const res = await fetch(`/api/servers/${activeServerId}/tools/${selectedTool.name}/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params)
+          });
+          const data = await res.json();
+          setResponse(data);
+        } catch (err) {
+          setResponse({ status: 'error', error: err.message });
+        }
+
+        setExecuting(false);
+      }
+
+      async function removeServer(serverId) {
+        try {
+          await fetch(`/api/servers/${serverId}`, { method: 'DELETE' });
+        } catch (err) {
+          console.error('Failed to remove server:', err);
+        }
+      }
+
+      function openRemoveServer(server) {
+        setServerToRemove(server);
+        setShowRemoveServer(true);
+      }
+
+      function closeRemoveServer() {
+        setShowRemoveServer(false);
+        setServerToRemove(null);
+      }
+
+      async function confirmRemoveServer() {
+        if (!serverToRemove) return;
+        await removeServer(serverToRemove.id);
+        setShowRemoveServer(false);
+        setServerToRemove(null);
+      }
+
+      async function generateSkill(serverId) {
+        try {
+          const res = await fetch(`/api/servers/${serverId}/generate-skill`, { method: 'POST' });
+          if (!res.ok) throw new Error('Failed to generate skill');
+
+          const data = await res.json();
+          if (data.status === 'error') {
+            alert('Error generating skill: ' + data.error);
+            return;
+          }
+
+          const blob = new Blob([data.skill], { type: 'text/markdown' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = data.filename;
+          a.click();
+          URL.revokeObjectURL(url);
+
+          alert(`Skill generated: ${data.filename}`);
+        } catch (err) {
+          console.error('Failed to generate skill:', err);
+          alert('Failed to generate skill: ' + err.message);
+        }
+      }
+
+      return (
+        <div>
+          <Header connected={connected} servers={servers} metrics={metrics} />
+          <div className="container">
+            <Sidebar
+              servers={servers}
+              activeServerId={activeServerId}
+              onSelectServer={setActiveServerId}
+              onAddServer={() => setShowAddServer(true)}
+              onRemoveServer={openRemoveServer}
+              onGenerateSkill={generateSkill}
+            />
+            <div className="main-content">
+              <Tabs activeTab={activeTab} onTabChange={setActiveTab} />
+              <div className="content-area">
+                {activeTab === 'tools' && (
+                  <ToolsTab
+                    tools={tools}
+                    onSelectTool={(tool) => {
+                      setSelectedTool(tool);
+                      setActiveTab('test');
+                    }}
+                  />
+                )}
+                {activeTab === 'test' && (
+                  <TestTab
+                    tools={tools}
+                    selectedTool={selectedTool}
+                    onSelectTool={setSelectedTool}
+                    requestParams={requestParams}
+                    onRequestChange={setRequestParams}
+                    response={response}
+                    executing={executing}
+                    onExecute={executeTool}
+                  />
+                )}
+                {activeTab === 'resources' && activeServerId && <ResourcesTab serverId={activeServerId} />}
+                {activeTab === 'prompts' && activeServerId && <PromptsTab serverId={activeServerId} />}
+                {activeTab === 'test-suites' && <TestSuitesTab servers={servers} activeServerId={activeServerId} />}
+                {activeTab === 'metrics' && <MetricsTab metrics={metrics} servers={servers} />}
+                {activeTab === 'logs' && <LogsTab logs={logs} onRefresh={loadLogs} />}
+              </div>
+            </div>
+          </div>
+
+          {showAddServer && (
+            <AddServerModal
+              onClose={() => setShowAddServer(false)}
+              onAdd={async (config) => {
+                try {
+                  await fetch('/api/servers/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                  });
+                  setShowAddServer(false);
+                } catch (err) {
+                  alert('Failed to add server: ' + err.message);
+                }
+              }}
+            />
+          )}
+
+          {showRemoveServer && serverToRemove && (
+            <div className="modal-overlay" onClick={closeRemoveServer}>
+              <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">Remove Server</div>
+                <div className="modal-body">
+                  Remove <strong>{serverToRemove.name}</strong> from the list?
+                </div>
+                <div className="modal-footer">
+                  <button className="btn" onClick={closeRemoveServer}>Cancel</button>
+                  <button className="btn btn-primary" onClick={confirmRemoveServer}>Remove</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Render app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<InspectorApp />);
+  </script>
+</body>
+</html>
