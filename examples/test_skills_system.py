@@ -56,7 +56,7 @@ class SkillsSystemTester:
         """Test MCPSkillGenerator"""
         result = TestResult("SkillGenerator")
         
-        print("\nðŸ“ Testing MCPSkillGenerator...")
+        print("\nTesting MCPSkillGenerator...")
         
         try:
             from polymcp.polyagent.skill_generator import (
@@ -68,7 +68,7 @@ class SkillsSystemTester:
             print("   ✅ Imports successful")
         except ImportError as e:
             result.add_fail(f"Import failed: {e}")
-            print(f"   âŒ Import failed: {e}")
+            print(f"Import failed: {e}")
             return result
         
         # Test initialization
@@ -81,7 +81,7 @@ class SkillsSystemTester:
             print("   ✅ Initialization successful")
         except Exception as e:
             result.add_fail(f"Initialization failed: {e}")
-            print(f"   âŒ Initialization failed: {e}")
+            print(f"Initialization failed: {e}")
             return result
         
         # Test tool categorization
@@ -104,7 +104,7 @@ class SkillsSystemTester:
             print(f"   ✅ Tool categorization: {category}")
         except Exception as e:
             result.add_fail(f"Categorization failed: {e}")
-            print(f"   âŒ Categorization failed: {e}")
+            print(f"Categorization failed: {e}")
         
         # Test skill file generation
         try:
@@ -136,7 +136,7 @@ class SkillsSystemTester:
             print("   ✅ Skill file generation")
         except Exception as e:
             result.add_fail(f"Skill generation failed: {e}")
-            print(f"   âŒ Skill generation failed: {e}")
+            print(f"Skill generation failed: {e}")
         
         # Test metadata generation
         try:
@@ -148,7 +148,7 @@ class SkillsSystemTester:
             print("   ✅ Metadata generation")
         except Exception as e:
             result.add_fail(f"Metadata generation failed: {e}")
-            print(f"   âŒ Metadata generation failed: {e}")
+            print(f"Metadata generation failed: {e}")
         
         self.results.append(result)
         return result
@@ -157,7 +157,7 @@ class SkillsSystemTester:
         """Test SkillLoader"""
         result = TestResult("SkillLoader")
         
-        print("\nðŸ“š Testing SkillLoader...")
+        print("\nTesting SkillLoader...")
         
         try:
             from polymcp.polyagent.skill_loader import (
@@ -169,7 +169,7 @@ class SkillsSystemTester:
             print("   ✅ Imports successful")
         except ImportError as e:
             result.add_fail(f"Import failed: {e}")
-            print(f"   âŒ Import failed: {e}")
+            print(f"Import failed: {e}")
             return result
         
         # Create test skills
@@ -215,7 +215,7 @@ Write content to a file.
             print("   ✅ Initialization successful")
         except Exception as e:
             result.add_fail(f"Initialization failed: {e}")
-            print(f"   âŒ Initialization failed: {e}")
+            print(f"Initialization failed: {e}")
             return result
         
         # Test lazy loading
@@ -228,7 +228,7 @@ Write content to a file.
             print("   ✅ Lazy loading")
         except Exception as e:
             result.add_fail(f"Lazy loading failed: {e}")
-            print(f"   âŒ Lazy loading failed: {e}")
+            print(f"Lazy loading failed: {e}")
         
         # Test caching
         try:
@@ -243,7 +243,7 @@ Write content to a file.
             print(f"   ✅ Caching (hits: {stats['cache_hits']})")
         except Exception as e:
             result.add_fail(f"Caching failed: {e}")
-            print(f"   âŒ Caching failed: {e}")
+            print(f"Caching failed: {e}")
         
         # Test token estimation
         try:
@@ -254,7 +254,7 @@ Write content to a file.
             print(f"   ✅ Token estimation (~{tokens} tokens)")
         except Exception as e:
             result.add_fail(f"Token estimation failed: {e}")
-            print(f"   âŒ Token estimation failed: {e}")
+            print(f"Token estimation failed: {e}")
         
         self.results.append(result)
         return result
@@ -263,7 +263,7 @@ Write content to a file.
         """Test SkillMatcher"""
         result = TestResult("SkillMatcher")
         
-        print("\n🔎 Testing SkillMatcher...")
+        print("\n🔎 Testing SkillMatcher...")
         
         try:
             from polymcp.polyagent.skill_matcher import (
@@ -275,7 +275,7 @@ Write content to a file.
             print("   ✅ Imports successful")
         except ImportError as e:
             result.add_fail(f"Import failed: {e}")
-            print(f"   âŒ Import failed: {e}")
+            print(f"Import failed: {e}")
             return result
         
         # Test basic matcher
@@ -285,7 +285,7 @@ Write content to a file.
             print("   ✅ Initialization successful")
         except Exception as e:
             result.add_fail(f"Initialization failed: {e}")
-            print(f"   âŒ Initialization failed: {e}")
+            print(f"Initialization failed: {e}")
             return result
         
         # Test matching
@@ -315,7 +315,7 @@ Write content to a file.
                 print(f"   ✅ Match '{query}' â†’ {top_match.category} ({top_match.confidence:.2f})")
             except Exception as e:
                 result.add_fail(f"Matching failed for '{query}': {e}")
-                print(f"   âŒ Matching failed for '{query}': {e}")
+                print(f"Matching failed for '{query}': {e}")
         
         # Test fuzzy matcher
         try:
@@ -329,7 +329,7 @@ Write content to a file.
             print("   ✅ Fuzzy matching with synonyms")
         except Exception as e:
             result.add_fail(f"Fuzzy matching failed: {e}")
-            print(f"   âŒ Fuzzy matching failed: {e}")
+            print(f"Fuzzy matching failed: {e}")
         
         # Test statistics
         try:
@@ -340,7 +340,7 @@ Write content to a file.
             print(f"   ✅ Statistics ({stats['queries_processed']} queries)")
         except Exception as e:
             result.add_fail(f"Statistics failed: {e}")
-            print(f"   âŒ Statistics failed: {e}")
+            print(f"Statistics failed: {e}")
         
         self.results.append(result)
         return result
@@ -349,7 +349,7 @@ Write content to a file.
         """Test DockerSandboxExecutor"""
         result = TestResult("DockerExecutor")
         
-        print("\nðŸ³ Testing DockerSandboxExecutor...")
+        print("\nTesting DockerSandboxExecutor...")
         
         # Check if Docker is available
         try:
@@ -359,8 +359,8 @@ Write content to a file.
             docker_available = True
         except Exception as e:
             docker_available = False
-            print(f"   âš ï¸  Docker not available: {e}")
-            print("   âš ï¸  Skipping Docker tests")
+            print(f"Docker not available: {e}")
+            print("Skipping Docker tests")
             result.add_fail("Docker not available")
             self.results.append(result)
             return result
@@ -372,7 +372,7 @@ Write content to a file.
             print("   ✅ Imports successful")
         except ImportError as e:
             result.add_fail(f"Import failed: {e}")
-            print(f"   âŒ Import failed: {e}")
+            print(f"Import failed: {e}")
             return result
         
         # Create mock ToolsAPI
@@ -404,7 +404,7 @@ Write content to a file.
             print("   ✅ ToolsAPI created")
         except Exception as e:
             result.add_fail(f"ToolsAPI creation failed: {e}")
-            print(f"   âŒ ToolsAPI creation failed: {e}")
+            print(f"ToolsAPI creation failed: {e}")
             return result
         
         # Test Docker executor initialization
@@ -418,7 +418,7 @@ Write content to a file.
             print("   ✅ Initialization successful")
         except Exception as e:
             result.add_fail(f"Initialization failed: {e}")
-            print(f"   âŒ Initialization failed: {e}")
+            print(f"Initialization failed: {e}")
             return result
         
         # Test simple code execution
@@ -437,7 +437,7 @@ print(json.dumps(result))
             print(f"   ✅ Code execution ({exec_result.execution_time:.2f}s)")
         except Exception as e:
             result.add_fail(f"Code execution failed: {e}")
-            print(f"   âŒ Code execution failed: {e}")
+            print(f"Code execution failed: {e}")
         
         # Test resource limits
         try:
@@ -455,7 +455,7 @@ print("CPU test completed")
             print("   ✅ Resource limits enforced")
         except Exception as e:
             result.add_fail(f"Resource limits test failed: {e}")
-            print(f"   âŒ Resource limits test failed: {e}")
+            print(f"Resource limits test failed: {e}")
         
         # Test cleanup
         try:
@@ -465,7 +465,7 @@ print("CPU test completed")
             print(f"   ✅ Container cleanup ({stats['containers_cleaned']} cleaned)")
         except Exception as e:
             result.add_fail(f"Cleanup test failed: {e}")
-            print(f"   âŒ Cleanup test failed: {e}")
+            print(f" Cleanup test failed: {e}")
         
         self.results.append(result)
         return result
@@ -492,7 +492,7 @@ print("CPU test completed")
             print("   ✅ All components importable")
         except ImportError as e:
             result.add_fail(f"Integration import failed: {e}")
-            print(f"   âŒ Integration import failed: {e}")
+            print(f"Integration import failed: {e}")
             return result
         
         # Test workflow
@@ -520,7 +520,7 @@ print("CPU test completed")
             
         except Exception as e:
             result.add_fail(f"Integration workflow failed: {e}")
-            print(f"   âŒ Integration workflow failed: {e}")
+            print(f"Integration workflow failed: {e}")
         
         self.results.append(result)
         return result
@@ -528,7 +528,7 @@ print("CPU test completed")
     def print_summary(self):
         """Print test summary"""
         print("\n" + "="*60)
-        print("ðŸ“Š TEST SUMMARY")
+        print("TEST SUMMARY")
         print("="*60)
         
         total_passed = 0
@@ -541,7 +541,7 @@ print("CPU test completed")
             
             if result.errors:
                 for error in result.errors:
-                    print(f"  âŒ {error}")
+                    print(f"{error}")
         
         print("\n" + "="*60)
         print(f"TOTAL: {total_passed} passed, {total_failed} failed")
@@ -549,7 +549,7 @@ print("CPU test completed")
         if total_failed == 0:
             print("✅ ALL TESTS PASSED!")
         else:
-            print(f"âŒ {total_failed} TESTS FAILED")
+            print(f"{total_failed} TESTS FAILED")
         
         print("="*60)
         
@@ -580,7 +580,7 @@ async def main():
         return 0 if success else 1
         
     except Exception as e:
-        print(f"\nâŒ Fatal error: {e}")
+        print(f"\nFatal error: {e}")
         import traceback
         traceback.print_exc()
         return 1
