@@ -12,8 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from polyagent import CodeModeAgent, PolyAgent, OllamaProvider, OpenAIProvider
-from polymcp_toolkit import expose_tools
+from polymcp.polyagent import CodeModeAgent, PolyAgent, OllamaProvider, OpenAIProvider
+from polymcp.polymcp_toolkit import expose_tools
 import os
 
 
@@ -320,3 +320,4 @@ if __name__ == "__main__":
         traceback.print_exc()
 
         sys.exit(1)
+
