@@ -10,7 +10,6 @@
 [![GitHub stars](https://img.shields.io/github/stars/llm-use/polymcp?style=social)](https://github.com/llm-use/polymcp/stargazers)
 [![Featured Article](https://img.shields.io/badge/Read-Article-blue)](https://levelup.gitconnected.com/why-your-python-functions-arent-ai-tools-yet-and-how-polymcp-fixes-it-in-one-line-d8e62550ac53)
 [![Seguimi su Twitter](https://img.shields.io/twitter/follow/justvugg?style=social)](https://x.com/justvugg)
-[![Discord](https://img.shields.io/discord/1461416129997312292?label=Discord&logo=discord&color=5865F2)](https://discord.gg/me6TV2aEs)
 
 [![PyPI total downloads](https://img.shields.io/pepy/dt/polymcp)](https://pepy.tech/project/polymcp)
 [![Website](https://img.shields.io/badge/website-poly--mcp.com-blue)](https://www.poly-mcp.com)
