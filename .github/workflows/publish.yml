@@ -16,6 +16,7 @@ on:
       - '!**/package.json'
       - '!**/*.ts'
       - '!**/*.js'
+      - '!polymcp/tools'
 
 permissions:
   id-token: write
