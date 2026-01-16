@@ -1,17 +1,5 @@
 """
-Unified PolyAgent - Ultimate Edition v2.0 (Complete)
-Production-ready with all enterprise features + critical fixes
-
-Key improvements:
-- Budget: add_tool_call positioned correctly (after check, before execution)
-- Array conversion: supports both numeric and string arrays
-- RateLimiter: trim caching for performance
-- Date validation: full validation for format:date/date-time
-- Clean code: chr(10) → "\n", improved readability
-- Parameter extraction: omits unknown required fields (never null)
-- JSON parsing: robust bracket counting
-- Security: redaction before LLM context injection
-- Tool ranking: correct sort (success_rate desc, latency asc)
+Unified PolyAgent
 """
 
 import json
@@ -2056,3 +2044,4 @@ def create_test_harness(agent: UnifiedPolyAgent):
             }
 
     return TestHarness(agent)
+
