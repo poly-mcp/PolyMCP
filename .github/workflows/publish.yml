@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - '!polymcp/**'                          # Codice Python
+      - 'polymcp/**'                          # Codice Python
       - 'pyproject.toml'                      # Config Python
       - 'MANIFEST.in'                         # IMPORTANTE per packaging
       - 'README.md'                           # Descrizione su PyPI
