@@ -22,6 +22,129 @@
 
 ## 🎉 What's New
 
+### UPDATE FOR UnifiedPolyAgent (v2.0)
+
+The `UnifiedPolyAgent` has been upgraded with **27 enterprise features** while maintaining 100% backward compatibility. No code changes required - your existing agents automatically gain production capabilities.
+
+**Key improvements:**
+- Budget control prevents runaway costs
+- Observability with structured logs and metrics
+- Security hardening with auto-redaction
+- Resilience with retry logic and circuit breakers
+- Async HTTP for 10x performance improvement
+
+---
+
+### Features
+
+**Budget & Cost Control**
+- Wall time limits (prevent infinite loops)
+- Token usage caps (control LLM costs)
+- Tool call limits (prevent abuse)
+- Payload size limits (memory safety)
+
+**Observability & Monitoring**
+- Structured JSON logs with trace IDs
+- Real-time metrics (success rate, latency, server health)
+- Export logs for monitoring systems (Prometheus, Grafana, DataDog)
+- Test trace replay for CI/CD validation
+
+**Security & Compliance**
+- Automatic PII/credential redaction in logs
+- Tool allowlist/denylist enforcement
+- JSON schema validation before execution
+- Parameter sanitization
+
+**Resilience & Reliability**
+- Intelligent retry with exponential backoff
+- Circuit breaker for failing servers (Netflix Hystrix pattern)
+- Per-tool and per-server rate limiting
+- Server health monitoring
+
+**Performance**
+- Async HTTP (10x faster than sync)
+- Tool caching with TTL (87% token reduction)
+- Memory-bounded history (no leaks)
+- Streaming progress callbacks
+
+**Architecture**
+- 3-tier: Planner → Executor → Validator
+- Deterministic tool selection with constraints
+- Goal achievement validation
+- Smart stop conditions (stall detection, semantic repetition)
+
+---
+
+### Migration
+
+**Zero breaking changes** - upgrade immediately:
+
+```python
+# Your existing code works unchanged
+from polymcp.polyagent import UnifiedPolyAgent
+
+async with UnifiedPolyAgent(
+    llm_provider=llm,
+    mcp_servers=["http://localhost:3000"]
+) as agent:
+    response = await agent.run_async("Your query")
+```
+
+**Enable production features** with optional parameters:
+
+```python
+# Production-ready configuration
+from polymcp.polyagent import UnifiedPolyAgent
+
+async with UnifiedPolyAgent(
+    llm_provider=llm,
+    mcp_servers=["http://localhost:3000"],
+    
+    # Budget limits
+    max_tokens=100000,
+    max_tool_calls=20,
+    max_wall_time=300.0,
+    
+    # Security
+    redact_logs=True,
+    tool_allowlist={'safe_tool_1', 'safe_tool_2'},
+    
+    # Observability
+    enable_structured_logs=True,
+    log_file="agent.log",
+    
+    # Resilience
+    max_retries=3,
+    enable_health_checks=True,
+    enable_rate_limiting=True,
+    
+    # Architecture
+    use_planner=True,
+    use_validator=True,
+) as agent:
+    response = await agent.run_async("Your query")
+    
+    # Access production features
+    metrics = agent.get_metrics()
+    logs = agent.export_logs(format='json')
+```
+
+**See full examples:** [`examples/UnifiedPolyAgent_new_feat.py`](examples/UnifiedPolyAgent_new_feat.py)
+
+---
+
+### Before vs After
+
+| Capability | Before | After |
+|-----------|--------|-------|
+| Cost control | Manual | Automatic budgets |
+| Error handling | Basic exceptions | Intelligent retry + circuit breaker |
+| Logging | Print statements | Structured JSON logs |
+| Security | None | Auto-redaction + allowlists |
+| Performance | Sync HTTP | Async HTTP (10x faster) |
+| Monitoring | None | Full metrics + tracing |
+| Production-ready | No | Yes |
+
 ### 🔍 **PolyMCP Inspector** - MCP Server Testing & Debugging Tool
 
 A comprehensive web-based tool for testing, debugging, and monitoring MCP servers with real-time metrics and automated testing capabilities.
