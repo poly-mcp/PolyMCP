@@ -235,6 +235,68 @@ const response = await agent.runAsync(`
 - ✅ Tool selection and orchestration
 - ✅ Code generation mode
 
+### UnifiedPolyAgent UPDATE
+
+UnifiedPolyAgent now includes production-grade capabilities without changing the public API. Existing code keeps working as-is, but you can enable extra controls for cost, reliability, security, and observability.
+
+What’s included in v2:
+- Budget controls: wall-time, token cap (est.), tool-call limits, payload limits
+- Observability: structured logs with trace IDs + runtime metrics (latency, success rate, server health)
+- Security: automatic redaction + tool allowlist/denylist support
+- Resilience: retries with exponential backoff, circuit breakers, per-tool/per-server rate limiting
+- Performance knobs: caching + bounded memory history
+
+Production configuration example:
+
+```ts
+import { UnifiedPolyAgent, OllamaProvider } from 'polymcp-ts';
+
+const agent = new UnifiedPolyAgent({
+  llmProvider: new OllamaProvider({
+    model: 'llama2',
+    baseUrl: 'http://localhost:11434',
+  }),
+  stdioServers: [{ command: 'npx', args: ['@playwright/mcp@latest'] }],
+
+  // Budget / cost control
+  maxWallTime: 300,
+  maxTokens: 100000,
+  maxToolCalls: 20,
+  maxPayloadBytes: 10 * 1024 * 1024,
+
+  // Observability
+  enableStructuredLogs: true,
+  logFile: 'agent.log',
+
+  // Security
+  redactLogs: true,
+  // toolAllowlist: new Set(['safe_tool_1', 'safe_tool_2']),
+  // toolDenylist: new Set(['dangerous_tool']),
+
+  // Resilience
+  maxRetries: 3,
+  retryBackoff: 1.0,
+  enableHealthChecks: true,
+  circuitBreakerThreshold: 5,
+  enableRateLimiting: true,
+  defaultRateLimit: 10,
+});
+
+await agent.start();
+const response = await agent.runAsync('Your query');
+````
+
+Export metrics and logs:
+
+```ts
+const metrics = agent.getMetrics();
+const logsJson = agent.exportLogs('json');
+```
+
+```
+::contentReference[oaicite:0]{index=0}
+```
+
 ### 🔒 **Built-in Authentication**
 Production-ready JWT and API key authentication.
 
