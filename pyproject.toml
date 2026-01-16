@@ -33,6 +33,7 @@ dependencies = [
     "pydantic>=2.5.0",
     "requests>=2.31.0",
     "docstring-parser>=0.15",
+    "httpx==0.28.1",
     # CLI dependencies
     "click>=8.1.0",
     "rich>=13.7.0",
