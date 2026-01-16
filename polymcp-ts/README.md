@@ -293,10 +293,6 @@ const metrics = agent.getMetrics();
 const logsJson = agent.exportLogs('json');
 ```
 
-```
-::contentReference[oaicite:0]{index=0}
-```
-
 ### 🔒 **Built-in Authentication**
 Production-ready JWT and API key authentication.
 
