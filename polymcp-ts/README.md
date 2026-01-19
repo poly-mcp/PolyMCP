@@ -2,8 +2,6 @@
   <img src="poly-mcp-ts.png" alt="PolymCP-TS Logo" width="700"/>
 </p>
 
-# PolyMCP-TS
-
 A TypeScript implementation of the Model Context Protocol (MCP) for building tool servers and AI agents. This library provides a comprehensive, type-safe API for creating MCP-compatible tools and orchestrating them with LLMs.
 
 ## Status
