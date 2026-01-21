@@ -40,6 +40,12 @@
 - 🛡️ Thread-safe token management & automatic retry on 401/403
 - 🎯 Drop-in auth wrapper for UnifiedPolyAgent (no code changes needed)
 
+**Security & Isolation**
+- 🐳 Docker executor: run code in isolated containers
+- 🔒 WASM sandboxing via Pyodide
+- 🛡️ Multi-layered security: AST validation + workspace isolation
+- 🔄 Circuit breakers and rate limiting
+
 **Production Stdio Client**
 - ✅ Windows + Unix compatible (no Proactor warnings)
 - 🔧 Robust JSON-RPC line parsing with timeout handling
