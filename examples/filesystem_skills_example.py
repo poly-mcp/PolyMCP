@@ -17,7 +17,7 @@ async def main():
     # Usa il server filesystem di MCP
     stdio_servers = [{
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", ".Polymcp\\tests"]
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\sarah\\Desktop\\Polymcp-main\\tests"]
     }]
     
     # 2. UnifiedAgent con Skills System

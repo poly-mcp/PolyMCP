@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def create_simple_tool():
     """Create a simple MCP tool server."""
-    from polymcp_toolkit import expose_tools
+    from polymcp.polymcp_toolkit import expose_tools
     
     def greet(name: str) -> str:
         """

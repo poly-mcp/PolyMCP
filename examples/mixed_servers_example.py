@@ -21,7 +21,7 @@ async def main():
     print("="*60 + "\n")
     
     # Create LLM provider
-    llm = OllamaProvider(model="gpt-oss:120b-cloud")
+    llm = OllamaProvider(model="llama2")
     
     # Configure both HTTP and stdio servers
     http_servers = [
