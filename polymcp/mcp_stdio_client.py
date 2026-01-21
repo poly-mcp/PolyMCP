@@ -1,17 +1,28 @@
+#!/usr/bin/env python3
 """
-MCP Stdio Client - Production Implementation
-Handles communication with stdio-based MCP servers (like Anthropic's official servers).
+MCP Stdio Client - Production Implementation (Fixed)
+- Robust JSON-RPC line reading
+- Correctly treats MCP tool-level errors (isError=true) as failures
+- Windows-safe process + pipe cleanup (avoids Proactor "closed pipe" warnings)
+- Works with stdio-based MCP servers like @playwright/mcp
 """
 
 import asyncio
 import json
 import logging
+import os
+import sys
+import shutil
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
-
 logger = logging.getLogger(__name__)
+JsonDict = Dict[str, Any]
 
+
+# =============================================================================
+# CONFIG
+# =============================================================================
 
 @dataclass
 class MCPServerConfig:
@@ -21,357 +32,324 @@ class MCPServerConfig:
     env: Optional[Dict[str, str]] = None
 
 
+# =============================================================================
+# STDIO CLIENT
+# =============================================================================
+
 class MCPStdioClient:
     """
     Client for stdio-based MCP servers.
-    
+
     Communicates with MCP servers that use JSON-RPC over stdin/stdout,
-    such as @playwright/mcp, @modelcontextprotocol/server-filesystem, etc.
+    such as @playwright/mcp.
     """
-    
+
     def __init__(self, config: MCPServerConfig):
-        """
-        Initialize stdio client.
-        
-        Args:
-            config: Server configuration (command, args, env)
-        """
         self.config = config
         self.process: Optional[asyncio.subprocess.Process] = None
         self.request_id = 0
         self._lock = asyncio.Lock()
         self._running = False
-    
+
     async def start(self) -> None:
-        """Start the MCP server process."""
+        """Start the MCP server process and initialize."""
         if self._running:
             return
-        
-        try:
-            import os
-            import sys
-            import shutil
-            
-            env = os.environ.copy()
-            if self.config.env:
-                env.update(self.config.env)
-            
-            # Gestione automatica cross-platform INTERNA
-            command = self.config.command
-            args = list(self.config.args)
-            
-            # Se è npx su Windows, usa cmd /c automaticamente
-            if sys.platform == "win32" and command == "npx":
-                # Trova npx
-                npx_path = shutil.which("npx") or shutil.which("npx.cmd")
+
+        env = os.environ.copy()
+        if self.config.env:
+            env.update(self.config.env)
+
+        command = self.config.command
+        args = list(self.config.args)
+
+        # Windows: if command is "npx", prefer npx.cmd and execute through cmd /c
+        if sys.platform == "win32":
+            cmd_lower = (command or "").lower()
+            if cmd_lower == "npx":
+                npx_path = shutil.which("npx.cmd") or shutil.which("npx")
                 if npx_path:
                     command = "cmd"
                     args = ["/c", npx_path] + args
-            
-            # Crea il processo
+            else:
+                # If user passed absolute path to npx, ensure .cmd is used if exists
+                if command.lower().endswith("\\npx") and os.path.exists(command + ".cmd"):
+                    command = command + ".cmd"
+
+        try:
             self.process = await asyncio.create_subprocess_exec(
                 command,
                 *args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=env
+                env=env,
             )
-            
             self._running = True
             logger.info(f"Started MCP server: {self.config.command} {' '.join(self.config.args)}")
-            
-            await asyncio.sleep(2)
+
+            # Give server a moment to boot
+            await asyncio.sleep(0.5)
             await self._initialize()
-            
+
         except Exception as e:
             logger.error(f"Failed to start MCP server: {e}")
-            raise RuntimeError(f"Failed to start MCP server: {e}")
-    
+            self._running = False
+            self.process = None
+            raise RuntimeError(f"Failed to start MCP server: {e}") from e
+
     async def _initialize(self) -> None:
         """Initialize the MCP connection."""
-        try:
-            response = await self._send_request("initialize", {
+        response = await self._send_request(
+            "initialize",
+            {
                 "protocolVersion": "2024-11-05",
-                "capabilities": {
-                    "tools": {}
-                },
-                "clientInfo": {
-                    "name": "polymcp",
-                    "version": "1.0.0"
-                }
-            })
-            
-            if "error" in response:
-                raise RuntimeError(f"Initialization failed: {response['error']}")
-            
-            logger.info("MCP connection initialized successfully")
-        
-        except Exception as e:
-            logger.error(f"Failed to initialize MCP connection: {e}")
-            raise
-    
-    async def _send_request(self, method: str, params: Optional[Dict] = None, timeout: float = 60.0) -> Dict[str, Any]:
-        """Send JSON-RPC request to server."""
+                "capabilities": {"tools": {}},
+                "clientInfo": {"name": "polymcp", "version": "1.0.0"},
+            },
+            timeout=60.0,
+        )
+
+        if "error" in response:
+            raise RuntimeError(f"Initialization failed: {response['error']}")
+
+        logger.info("MCP connection initialized successfully")
+
+    async def _read_jsonrpc_response(self, expected_id: int, timeout: float) -> JsonDict:
+        """
+        Read JSON-RPC responses line-by-line until we get the one with matching id.
+        MCP JSON-RPC is newline delimited.
+        """
+        if not self.process or not self.process.stdout:
+            raise RuntimeError("MCP server not running")
+
+        loop = asyncio.get_event_loop()
+        start = loop.time()
+
+        while True:
+            if loop.time() - start > timeout:
+                raise asyncio.TimeoutError()
+
+            try:
+                line = await asyncio.wait_for(self.process.stdout.readline(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+
+            if not line:
+                raise RuntimeError("MCP server closed stdout (no response)")
+
+            s = line.decode("utf-8", errors="replace").strip()
+            if not s:
+                continue
+
+            # Ignore non-JSON stdout lines safely
+            try:
+                msg = json.loads(s)
+            except json.JSONDecodeError:
+                continue
+
+            if msg.get("id") == expected_id:
+                return msg
+            # else: ignore notifications or other ids
+
+    async def _send_request(self, method: str, params: Optional[Dict] = None, timeout: float = 60.0) -> JsonDict:
+        """Send JSON-RPC request to server and wait for matching response."""
         async with self._lock:
-            if not self.process or not self._running:
+            if not self.process or not self._running or not self.process.stdin:
                 raise RuntimeError("MCP server not running")
-            
+
             self.request_id += 1
-            request = {
-                "jsonrpc": "2.0",
-                "id": self.request_id,
-                "method": method
-            }
-            
+            rid = self.request_id
+
+            request: JsonDict = {"jsonrpc": "2.0", "id": rid, "method": method}
             if params is not None:
                 request["params"] = params
-            
+
             try:
-                # Send request
-                request_json = json.dumps(request) + "\n"
-                self.process.stdin.write(request_json.encode('utf-8'))
+                payload = (json.dumps(request) + "\n").encode("utf-8")
+                self.process.stdin.write(payload)
                 await self.process.stdin.drain()
-                
-                logger.debug(f"Sent request: {method}")
-                
-                # Leggi risposta in modo più robusto
-                response_data = b""
-                start_time = asyncio.get_event_loop().time()
-                
-                while True:
-                    if asyncio.get_event_loop().time() - start_time > timeout:
-                        raise asyncio.TimeoutError()
-                    
-                    try:
-                        chunk = await asyncio.wait_for(
-                            self.process.stdout.read(1024), 
-                            timeout=1.0
-                        )
-                        if not chunk:
-                            break
-                        
-                        response_data += chunk
-                        
-                        # Cerca una risposta JSON completa
-                        if b'\n' in response_data:
-                            lines = response_data.split(b'\n')
-                            for line in lines[:-1]:  # Tutte tranne l'ultima (potrebbe essere incompleta)
-                                try:
-                                    response = json.loads(line.decode('utf-8'))
-                                    if response.get('id') == self.request_id:
-                                        logger.debug(f"Received response for: {method}")
-                                        return response
-                                except json.JSONDecodeError:
-                                    continue
-                            # Mantieni solo l'ultima linea incompleta
-                            response_data = lines[-1]
-                            
-                    except asyncio.TimeoutError:
-                        continue
-                
-                raise RuntimeError("No valid response received")
-                
-            except asyncio.TimeoutError:
-                logger.error(f"Timeout waiting for response to {method}")
-                raise RuntimeError(f"Timeout waiting for response to {method}")
-            
             except Exception as e:
-                logger.error(f"Error sending request: {e}")
-                raise
-    
+                raise RuntimeError(f"Failed sending request {method}: {e}") from e
+
+            try:
+                return await self._read_jsonrpc_response(expected_id=rid, timeout=timeout)
+            except asyncio.TimeoutError as e:
+                raise RuntimeError(f"Timeout waiting for response to {method}") from e
+
     async def list_tools(self) -> List[Dict[str, Any]]:
-        """
-        List available tools from the MCP server.
-        
-        Returns:
-            List of tool definitions
-        """
+        """List available tools from the MCP server."""
         try:
-            response = await self._send_request("tools/list")
-            
+            response = await self._send_request("tools/list", timeout=60.0)
             if "error" in response:
                 raise RuntimeError(f"Error listing tools: {response['error']}")
-            
-            tools = response.get("result", {}).get("tools", [])
+            tools = response.get("result", {}).get("tools", []) or []
             logger.info(f"Listed {len(tools)} tools")
-            
             return tools
-        
         except Exception as e:
             logger.error(f"Failed to list tools: {e}")
             return []
-    
+
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
-        """
-        Call a tool on the MCP server.
-        
-        Args:
-            name: Tool name
-            arguments: Tool arguments
-            
-        Returns:
-            Tool result
-        """
-        try:
-            response = await self._send_request("tools/call", {
-                "name": name,
-                "arguments": arguments
-            })
-            
-            if "error" in response:
-                error_msg = response["error"].get("message", str(response["error"]))
-                raise RuntimeError(f"Tool execution failed: {error_msg}")
-            
-            result = response.get("result", {})
-            print(f"🔍 RAW TOOL RESULT: {json.dumps(result, indent=2)}")
-            logger.info(f"Tool {name} executed successfully")
-            
-            return result
-        
-        except Exception as e:
-            logger.error(f"Failed to call tool {name}: {e}")
-            raise
-    
+        """Call a tool on the MCP server."""
+        response = await self._send_request(
+            "tools/call",
+            {"name": name, "arguments": arguments},
+            timeout=120.0,
+        )
+
+        if "error" in response:
+            err = response["error"]
+            msg = err.get("message") if isinstance(err, dict) else str(err)
+            raise RuntimeError(f"Tool execution failed: {msg}")
+
+        # Tool-level failures may be inside result as isError=true
+        return response.get("result", {})
+
     async def stop(self) -> None:
-        import sys
-        """Stop the MCP server process."""
+        """Stop the MCP server process (Windows-safe cleanup)."""
         if not self._running:
             return
-        
+
         self._running = False
-        
+
         try:
-            # Cancella il reader task se esiste
-            if hasattr(self, '_reader_task') and self._reader_task and not self._reader_task.done():
-                self._reader_task.cancel()
-                try:
-                    await self._reader_task
-                except asyncio.CancelledError:
-                    pass
-            
-            if self.process:
-                # Chiudi i transport in modo pulito su Windows
-                if sys.platform == "win32":
-                    # Su Windows, chiudi prima i pipe transport
-                    for stream in [self.process.stdin, self.process.stdout, self.process.stderr]:
-                        if stream and hasattr(stream, 'close'):
-                            try:
-                                stream.close()
-                            except:
-                                pass
-                    
-                    # Aspetta un attimo per la chiusura dei transport
-                    await asyncio.sleep(0.1)
-                
-                # Termina il processo
-                try:
-                    self.process.terminate()
-                    await asyncio.wait_for(self.process.wait(), timeout=3.0)
-                    logger.info("MCP server stopped gracefully")
-                except asyncio.TimeoutError:
-                    # Forza la chiusura
+            if not self.process:
+                return
+
+            # 1) Best-effort: signal EOF to stdin, then close pipes
+            try:
+                if self.process.stdin:
                     try:
-                        self.process.kill()
-                        await self.process.wait()
-                    except:
+                        self.process.stdin.write_eof()
+                    except Exception:
                         pass
-                    logger.warning("MCP server killed (timeout)")
-                
-                # Su Windows, aspetta che i transport si chiudano
-                if sys.platform == "win32":
-                    await asyncio.sleep(0.5)
-        
+                    try:
+                        await self.process.stdin.drain()
+                    except Exception:
+                        pass
+                    try:
+                        self.process.stdin.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Close stdout/stderr to release transports
+            try:
+                if self.process.stdout:
+                    try:
+                        self.process.stdout.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            try:
+                if self.process.stderr:
+                    try:
+                        self.process.stderr.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # 2) Terminate, then kill if needed
+            try:
+                self.process.terminate()
+                await asyncio.wait_for(self.process.wait(), timeout=8.0)
+                logger.info("MCP server stopped gracefully")
+            except asyncio.TimeoutError:
+                try:
+                    self.process.kill()
+                    await self.process.wait()
+                except Exception:
+                    pass
+                logger.warning("MCP server killed (timeout)")
+
         except Exception as e:
             logger.error(f"Error stopping MCP server: {e}")
-        
+
         finally:
             self.process = None
-            if hasattr(self, '_responses'):
-                self._responses.clear()
-            if hasattr(self, '_events'):
-                self._events.clear()
+            # Give asyncio time to finalize transports on Windows
+            if sys.platform == "win32":
+                await asyncio.sleep(0.3)
 
     async def __aenter__(self):
-        """Context manager entry."""
         await self.start()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        import sys
-        """Context manager exit."""
         try:
             await self.stop()
-            # Dai tempo ad asyncio di pulire su Windows
-            if sys.platform == "win32":
-                await asyncio.sleep(0.5)
-        except:
-            pass  # Ignora errori durante la chiusura
+        except Exception:
+            pass
+        return False
 
+
+# =============================================================================
+# ADAPTER
+# =============================================================================
 
 class MCPStdioAdapter:
     """
-    Adapter to expose stdio MCP server as HTTP-compatible interface.
-    
-    This allows stdio servers to work seamlessly with PolyAgent.
+    Adapter to expose stdio MCP server in a PolyMCP-friendly interface.
     """
-    
+
     def __init__(self, client: MCPStdioClient):
-        """
-        Initialize adapter.
-        
-        Args:
-            client: Stdio client instance
-        """
         self.client = client
-        self._tools_cache: Optional[List[Dict]] = None
-    
+        self._tools_cache: Optional[List[Dict[str, Any]]] = None
+
     async def get_tools(self) -> List[Dict[str, Any]]:
-        """
-        Get tools in PolyMCP HTTP format.
-        
-        Returns:
-            List of tools in HTTP format
-        """
+        """Get tools in PolyMCP HTTP-like format."""
         if self._tools_cache is not None:
             return self._tools_cache
-        
+
         stdio_tools = await self.client.list_tools()
-        
-        # Convert to PolyMCP format
-        http_tools = []
+
+        http_tools: List[Dict[str, Any]] = []
         for tool in stdio_tools:
-            http_tool = {
-                "name": tool.get("name"),
-                "description": tool.get("description", ""),
-                "input_schema": tool.get("inputSchema", {})
-            }
-            http_tools.append(http_tool)
-        
+            http_tools.append(
+                {
+                    "name": tool.get("name"),
+                    "description": tool.get("description", "") or "",
+                    "input_schema": tool.get("inputSchema", {}) or {},
+                }
+            )
+
         self._tools_cache = http_tools
         return http_tools
-    
-    async def invoke_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+
+    @staticmethod
+    def _extract_mcp_error_text(tool_result: Dict[str, Any]) -> str:
         """
-        Invoke tool in HTTP-compatible format.
-        
-        Args:
-            tool_name: Name of tool to invoke
-            parameters: Tool parameters
-            
-        Returns:
-            Result in HTTP format
+        MCP tool-level errors commonly return:
+          { "content": [{"type":"text","text":"..."}], "isError": true }
+        """
+        content = tool_result.get("content")
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict):
+                    txt = item.get("text")
+                    if isinstance(txt, str) and txt.strip():
+                        return txt.strip()[:1500]
+        return "Tool returned isError=true but no readable error text was found."
+
+    async def invoke_tool(self, tool_name: str, parameters: Dict[str, Any]) -> JsonDict:
+        """
+        Invoke a tool and return:
+          - {"result": <tool_result>, "status": "success"} on success
+          - {"error": <message>, "status": "execution_failed", "result": <raw>} on tool-level failure
         """
         try:
-            result = await self.client.call_tool(tool_name, parameters)
-            print(f"📦 WRAPPED RESULT: {json.dumps({'result': result, 'status': 'success'}, indent=2)}")
-            return {
-                "result": result,
-                "status": "success"
-            }
-        
+            tool_result = await self.client.call_tool(tool_name, parameters)
+
+            if isinstance(tool_result, dict) and tool_result.get("isError") is True:
+                msg = self._extract_mcp_error_text(tool_result)
+                return {"error": msg, "status": "execution_failed", "result": tool_result}
+
+            return {"result": tool_result, "status": "success"}
+
         except Exception as e:
-            return {
-                "error": str(e),
-                "status": "error"
-            }
+            return {"error": str(e), "status": "error"}
