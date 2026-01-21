@@ -5,13 +5,13 @@ on:
     branches:
       - main
     paths:
-      - '!polymcp/**'                          # Codice Python
-      - '!pyproject.toml'                      # Config Python
-      - '!MANIFEST.in'                         # IMPORTANTE per packaging
-      - '!README.md'                           # Descrizione su PyPI
-      - '!LICENSE'                             # Licenza del package
-      - '!requirements.txt'                    # Se usato per dependencies
-      - '!.github/workflows/python-publish.yml' # Questo workflow
+      - 'polymcp/**'                          # Codice Python
+      - 'pyproject.toml'                      # Config Python
+      - 'MANIFEST.in'                         # IMPORTANTE per packaging
+      - 'README.md'                           # Descrizione su PyPI
+      - 'LICENSE'                             # Licenza del package
+      - 'requirements.txt'                    # Se usato per dependencies
+      - '.github/workflows/python-publish.yml' # Questo workflow
       - '!polymcp-ts/**'                     # IGNORA TypeScript
       - '!**/package.json'
       - '!**/*.ts'
