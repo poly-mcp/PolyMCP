@@ -23,7 +23,7 @@ class LLMProvider(ABC):
         Returns:
             Generated text
         """
-        pass
+        raise NotImplementedError
 
 
 class OpenAIProvider(LLMProvider):
@@ -32,18 +32,20 @@ class OpenAIProvider(LLMProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gpt-4",
+        model: str = "gpt-4o-mini",
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        timeout: float = 60.0,
     ):
         """
         Initialize OpenAI provider.
         
         Args:
             api_key: OpenAI API key (or set OPENAI_API_KEY env var)
-            model: Model name (gpt-4, gpt-3.5-turbo, etc.)
+            model: Model name
             temperature: Sampling temperature (0.0-2.0)
             max_tokens: Maximum tokens to generate
+            timeout: Request timeout seconds
         """
         try:
             from openai import OpenAI
@@ -54,7 +56,7 @@ class OpenAIProvider(LLMProvider):
         if not self.api_key:
             raise ValueError("OpenAI API key not provided. Set OPENAI_API_KEY or pass api_key parameter")
         
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = OpenAI(api_key=self.api_key, timeout=timeout)
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -81,16 +83,11 @@ class AnthropicProvider(LLMProvider):
         api_key: Optional[str] = None,
         model: str = "claude-3-5-sonnet-20241022",
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        timeout: float = 60.0,
     ):
         """
         Initialize Anthropic provider.
-        
-        Args:
-            api_key: Anthropic API key (or set ANTHROPIC_API_KEY env var)
-            model: Model name
-            temperature: Sampling temperature (0.0-1.0)
-            max_tokens: Maximum tokens to generate
         """
         try:
             from anthropic import Anthropic
@@ -101,7 +98,7 @@ class AnthropicProvider(LLMProvider):
         if not self.api_key:
             raise ValueError("Anthropic API key not provided. Set ANTHROPIC_API_KEY or pass api_key parameter")
         
-        self.client = Anthropic(api_key=self.api_key)
+        self.client = Anthropic(api_key=self.api_key, timeout=timeout)
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -127,15 +124,11 @@ class OllamaProvider(LLMProvider):
         self,
         model: str = "llama2",
         base_url: str = "http://localhost:11434",
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        timeout: float = 120.0,
     ):
         """
         Initialize Ollama provider.
-        
-        Args:
-            model: Model name (llama2, mistral, codellama, etc.)
-            base_url: Ollama server URL
-            temperature: Sampling temperature (0.0-2.0)
         """
         try:
             import requests
@@ -145,25 +138,21 @@ class OllamaProvider(LLMProvider):
         self.model = model
         self.base_url = base_url.rstrip('/')
         self.temperature = temperature
+        self.timeout = float(timeout)
         self.requests = requests
     
     def generate(self, prompt: str, **kwargs) -> str:
         """Generate response using Ollama API."""
         try:
             url = f"{self.base_url}/api/generate"
-            
             payload = {
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
-                "options": {
-                    "temperature": kwargs.get("temperature", self.temperature)
-                }
+                "options": {"temperature": kwargs.get("temperature", self.temperature)}
             }
-            
-            response = self.requests.post(url, json=payload, timeout=60)
+            response = self.requests.post(url, json=payload, timeout=self.timeout)
             response.raise_for_status()
-            
             return response.json()["response"]
         except Exception as e:
             raise RuntimeError(f"Ollama API call failed: {e}")
@@ -177,17 +166,9 @@ class KimiProvider(LLMProvider):
         api_key: Optional[str] = None,
         model: str = "moonshot-v1-8k",
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        timeout: float = 30.0,
     ):
-        """
-        Initialize Kimi provider.
-        
-        Args:
-            api_key: Kimi API key (or set KIMI_API_KEY env var)
-            model: Model name
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-        """
         try:
             import requests
         except ImportError:
@@ -200,29 +181,25 @@ class KimiProvider(LLMProvider):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.timeout = float(timeout)
         self.requests = requests
         self.base_url = "https://api.moonshot.cn/v1"
     
     def generate(self, prompt: str, **kwargs) -> str:
-        """Generate response using Kimi API."""
         try:
             url = f"{self.base_url}/chat/completions"
-            
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
             payload = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": kwargs.get("temperature", self.temperature),
                 "max_tokens": kwargs.get("max_tokens", self.max_tokens)
             }
-            
-            response = self.requests.post(url, json=payload, headers=headers, timeout=30)
+            response = self.requests.post(url, json=payload, headers=headers, timeout=self.timeout)
             response.raise_for_status()
-            
             return response.json()["choices"][0]["message"]["content"]
         except Exception as e:
             raise RuntimeError(f"Kimi API call failed: {e}")
@@ -236,17 +213,9 @@ class DeepSeekProvider(LLMProvider):
         api_key: Optional[str] = None,
         model: str = "deepseek-chat",
         temperature: float = 0.7,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
+        timeout: float = 30.0,
     ):
-        """
-        Initialize DeepSeek provider.
-        
-        Args:
-            api_key: DeepSeek API key (or set DEEPSEEK_API_KEY env var)
-            model: Model name
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-        """
         try:
             import requests
         except ImportError:
@@ -259,29 +228,25 @@ class DeepSeekProvider(LLMProvider):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.timeout = float(timeout)
         self.requests = requests
         self.base_url = "https://api.deepseek.com/v1"
     
     def generate(self, prompt: str, **kwargs) -> str:
-        """Generate response using DeepSeek API."""
         try:
             url = f"{self.base_url}/chat/completions"
-            
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
             payload = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": kwargs.get("temperature", self.temperature),
                 "max_tokens": kwargs.get("max_tokens", self.max_tokens)
             }
-            
-            response = self.requests.post(url, json=payload, headers=headers, timeout=30)
+            response = self.requests.post(url, json=payload, headers=headers, timeout=self.timeout)
             response.raise_for_status()
-            
             return response.json()["choices"][0]["message"]["content"]
         except Exception as e:
             raise RuntimeError(f"DeepSeek API call failed: {e}")
