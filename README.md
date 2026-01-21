@@ -32,7 +32,7 @@
 <details>
   <summary><b>🎉 What's New</b> (open)</summary>
 
-### PolyMCP BIG UPDATE
+### PolyMCP PYTHON VERSION UPDATE
 
 **Authentication System**
 - 🔐 Pluggable auth: JWT, OAuth2 (RFC 6749), API keys, custom providers
