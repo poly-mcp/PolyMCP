@@ -42,12 +42,8 @@
 
 **Security & Isolation**
 - 🐳 Docker executor: run code in isolated containers
-- 🔒 WASM sandboxing via Pyodide
-- 🛡️ Multi-layered security: AST validation + workspace isolation
-- 🔄 Circuit breakers and rate limiting
 
 **Production Stdio Client**
-- ✅ Windows + Unix compatible (no Proactor warnings)
 - 🔧 Robust JSON-RPC line parsing with timeout handling
 - 🛡️ Graceful shutdown: proper pipe cleanup & process termination
 - 🎭 Battle-tested with Playwright, filesystem, and custom servers
