@@ -1811,7 +1811,7 @@ Rules:
 
         # Get available tools for the planner
         available_tools = await self._get_tools_for_planner(user_message)
-        
+
         # Build tools list for prompt (compact format)
         tools_section = self._build_tools_list_for_planner(available_tools)
 
@@ -1840,20 +1840,20 @@ JSON only:"""
     async def _get_tools_for_planner(self, user_message: str, max_tools: int = 30) -> List[Dict[str, Any]]:
         """
         Get relevant tools for the planner.
-        
+
         Strategy:
         - If skills available and tool count > max_tools: use skill matcher to pre-filter
         - Otherwise: return all tools (sorted by success rate)
-        
+
         This ensures planner gets relevant tools without context explosion.
         """
         # Get all available tools
         all_tools = await self._get_all_tools()
-        
+
         # If few tools, return all
         if len(all_tools) <= max_tools:
             return all_tools
-        
+
         # If skills available, use matcher to pre-filter relevant tools
         if self.skill_matcher and self.skill_loader:
             try:
@@ -1861,11 +1861,11 @@ JSON only:"""
                 if skills_dict:
                     index = self.skill_matcher.build_index_from_skills(skills_dict)
                     results = self.skill_matcher.match_index(user_message, index, top_k=max_tools)
-                    
+
                     # Get tools from match results
                     relevant_tools: List[Dict[str, Any]] = []
                     seen: Set[Tuple[str, str]] = set()
-                    
+
                     for match_result in results:
                         tool_name = match_result.tool_name
                         if tool_name in self.tool_registry:
@@ -1876,7 +1876,7 @@ JSON only:"""
                                     continue
                                 seen.add(key)
                                 relevant_tools.append(inst)
-                    
+
                     if relevant_tools:
                         self._log("DEBUG", "planner_tools_filtered", {
                             "total": len(all_tools),
@@ -1885,32 +1885,32 @@ JSON only:"""
                         return relevant_tools
             except Exception as e:
                 self._log("WARNING", "planner_filter_failed", {"error": str(e)})
-        
+
         # Fallback: return top N tools by success rate
         return all_tools[:max_tools]
-    
+
     def _build_tools_list_for_planner(self, tools: List[Dict[str, Any]]) -> str:
         """
         Build compact tools list for planner prompt.
-        
+
         Format: "tool_name: brief description"
         Keeps prompt size manageable while providing enough info.
         """
         if not tools:
             return "No tools available."
-        
+
         lines = []
         for tool in tools:
             name = tool.get("name", "unknown")
             desc = tool.get("description", "")
-            
+
             # Truncate long descriptions
             if len(desc) > 80:
                 desc = desc[:77] + "..."
-            
+
             # Format: "- tool_name: description"
             lines.append(f"- {name}: {desc}")
-        
+
         return "\n".join(lines)
 
     async def _validate_goal_achieved(self, user_message: str, action_history: List[Dict[str, Any]]) -> Tuple[
@@ -1922,7 +1922,16 @@ JSON only:"""
         for action in action_history[-5:]:
             r: AgentResult = action["result"]
             status = "success" if r.status == "success" else "failed"
-            results_summary.append(f"- {action['tool']}: {status}")
+
+            # Include the actual result in the summary
+            result_info = status
+            if r.is_success() and r.result:
+                # Extract the actual return value from the tool
+                actual_result = r.result.get("content", [{}])[0].get("text", "")
+                if actual_result:
+                    result_info = f"{status}, result: {actual_result}"
+
+            results_summary.append(f"- {action['tool']}: {result_info}")
         results_block = "\n".join(results_summary)
 
         prompt = f"""{self.VALIDATOR_SYSTEM}
