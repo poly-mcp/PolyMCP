@@ -78,13 +78,14 @@ class MCPStdioClient:
 
         try:
             self.process = await asyncio.create_subprocess_exec(
-                command,
-                *args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
+            command,
+            *args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+            limit=50 * 1024 * 1024,  # 50MB (pick a value that fits your use-case)
+        )
             self._running = True
             logger.info(f"Started MCP server: {self.config.command} {' '.join(self.config.args)}")
 
