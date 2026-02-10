@@ -235,6 +235,14 @@ export function loadFromEnv(): PolyMCPConfig {
 }
 
 /**
+ * Load configuration from optional overrides plus environment defaults.
+ */
+export function loadConfig(config?: Partial<PolyMCPConfig>): PolyMCPConfig {
+  const manager = new ConfigManager(config);
+  return manager.getConfig();
+}
+
+/**
  * Get default server port
  */
 export function getDefaultPort(): number {
