@@ -5,7 +5,6 @@
 <p align="center">
   <a href="../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.8-blue" alt="Python 3.8+">
-  <img src="https://img.shields.io/badge/CLI-production-ready-green" alt="CLI status">
 </p>
 
 > Command-line interface for creating projects, registering MCP servers, running agents, and validating integrations.
