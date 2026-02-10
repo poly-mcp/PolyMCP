@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { ValidationError } from '../errors';
 import { VALIDATION_DEFAULTS } from '../constants';
+import type { MCPTool } from '../types';
 
 /**
  * Validate data against a Zod schema
@@ -175,6 +176,30 @@ export async function validateToolParameters(
     }
     return { valid: false, errors: [String(error)] };
   }
+}
+
+/**
+ * Validate a tool definition shape before registration.
+ */
+export function validateToolDefinition(
+  tool: Partial<MCPTool>
+): { valid: boolean; errors?: string[] } {
+  const errors: string[] = [];
+
+  if (!tool || typeof tool !== 'object') {
+    return { valid: false, errors: ['Tool must be an object'] };
+  }
+  if (!tool.name || typeof tool.name !== 'string' || !tool.name.trim()) {
+    errors.push('Tool name must be a non-empty string');
+  }
+  if (!tool.description || typeof tool.description !== 'string' || !tool.description.trim()) {
+    errors.push('Tool description must be a non-empty string');
+  }
+  if (!tool.inputSchema || typeof tool.inputSchema !== 'object') {
+    errors.push('Tool inputSchema is required');
+  }
+
+  return errors.length > 0 ? { valid: false, errors } : { valid: true };
 }
 
 /**
