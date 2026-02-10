@@ -6,6 +6,7 @@ Interactive MCP server testing and debugging tool.
 import click
 import asyncio
 import json
+import secrets
 import sys
 from pathlib import Path
 
@@ -17,7 +18,12 @@ from pathlib import Path
 @click.option('--verbose', is_flag=True, help='Enable verbose logging')
 @click.option('--config', type=click.Path(exists=True), help='Path to config file with servers')
 @click.option('--server', 'servers', multiple=True, help='Add server (format: http://url or stdio:command)')
-def inspector(host, port, no_browser, verbose, config, servers):
+@click.option('--secure', is_flag=True, help='Enable secure mode (API key required)')
+@click.option('--api-key', default=None, help='API key for secure mode (auto-generated if omitted)')
+@click.option('--allow-origin', 'allow_origins', multiple=True, help='Allowed CORS origin (repeatable)')
+@click.option('--rate-limit', default=120, type=int, help='API requests allowed per window')
+@click.option('--rate-window', default=60, type=int, help='Rate limit window in seconds')
+def inspector(host, port, no_browser, verbose, config, servers, secure, api_key, allow_origins, rate_limit, rate_window):
     """
     Launch PolyMCP Inspector - Interactive MCP Server Testing Tool.
     
@@ -28,6 +34,8 @@ def inspector(host, port, no_browser, verbose, config, servers):
     Examples:
       polymcp inspector
       polymcp inspector --port 8080
+      polymcp inspector --secure
+      polymcp inspector --secure --api-key my-strong-key
       polymcp inspector --server http://localhost:8000/mcp
       polymcp inspector --server "stdio:npx @playwright/mcp@latest"
       polymcp inspector --config servers.json
@@ -81,8 +89,16 @@ def inspector(host, port, no_browser, verbose, config, servers):
         except Exception as e:
             click.echo(f"Warning: Failed to load config: {e}", err=True)
     
+    if secure and not api_key:
+        api_key = secrets.token_urlsafe(24)
+
     # Display configuration
     click.echo(f"Server: http://{host}:{port}")
+    click.echo(f"Secure mode: {'ON' if secure else 'OFF'}")
+    if secure:
+        click.echo(f"Inspector API key: {api_key}")
+    if allow_origins:
+        click.echo(f"Allowed origins: {', '.join(allow_origins)}")
     if server_configs:
         click.echo(f"Initial servers: {len(server_configs)}")
         for cfg in server_configs:
@@ -104,7 +120,12 @@ def inspector(host, port, no_browser, verbose, config, servers):
             port=port,
             verbose=verbose,
             open_browser=not no_browser,
-            servers=server_configs if server_configs else None
+            servers=server_configs if server_configs else None,
+            secure_mode=secure,
+            api_key=api_key,
+            allowed_origins=list(allow_origins) if allow_origins else None,
+            rate_limit_per_minute=rate_limit,
+            rate_limit_window_seconds=rate_window,
         ))
     except KeyboardInterrupt:
         click.echo("\n\nShutting down inspector...")
