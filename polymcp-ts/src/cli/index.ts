@@ -13,13 +13,14 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { initCommand } from './commands/init';
 import { testCommand } from './commands/test';
+import { getVersion } from '../version';
 
 const program = new Command();
 
 program
   .name('polymcp')
   .description('PolyMCP CLI - MCP server toolkit for TypeScript')
-  .version('1.0.0');
+  .version(getVersion());
 
 // Init command
 program
@@ -28,7 +29,7 @@ program
   .argument('<project-name>', 'Name of the project to create')
   .option(
     '-t, --type <type>',
-    'Project type (basic, http-server, stdio-server, wasm-server, agent)',
+    'Project type (basic, http-server, stdio-server, wasm-server, agent, mcp-app)',
     'basic'
   )
   .option('--with-auth', 'Include authentication setup', false)
