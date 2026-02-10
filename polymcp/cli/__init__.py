@@ -4,7 +4,7 @@ PolyMCP CLI - Command Line Interface
 Production-ready CLI for managing PolyMCP projects, servers, and agents.
 """
 
-__version__ = "1.2.5"
+__version__ = "1.3.6"
 
 from .main import cli, main  # ← Aggiungi main qui!
 

@@ -45,7 +45,7 @@ def cli(ctx):
       polymcp server add http://...    # Add MCP server
       polymcp server list              # List configured servers
       polymcp agent run                # Run agent interactively
-      polymcp skills generate          # Generate skills from servers
+      polymcp skills                   # Run skills.sh CLI (npx skills)
       polymcp inspector                # Launch Inspector (NEW!)
       polymcp test server http://...   # Test MCP server
     """
