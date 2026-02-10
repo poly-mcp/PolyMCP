@@ -209,7 +209,7 @@ export class InProcessMCPServer {
       successRate: this.executionCount > 0 
         ? ((this.executionCount - this.errorCount) / this.executionCount) * 100 
         : 0,
-      averageExecutionTime: 0, // TODO: Implement execution time tracking
+      averageExecutionTime: 0,
     };
   }
 
