@@ -1,3 +1,7 @@
+# PolyMCP Production Requirements
+# Core version: 1.2.0
+# Last updated: 2025-01-19
+
 # ============================================================================
 # CORE FRAMEWORK (REQUIRED)
 # ============================================================================
@@ -7,6 +11,7 @@ pydantic==2.5.3
 requests==2.31.0
 docstring-parser==0.15
 httpx==0.28.1
+PyJWT==2.10.1
 # ============================================================================
 # CLI DEPENDENCIES (REQUIRED for polymcp CLI)
 # ============================================================================
@@ -102,5 +107,23 @@ docker==7.0.0
 # 1. Minimal installation (core only):
 #    pip install polymcp
 #
-
-
+# 2. With OpenAI support:
+#    pip install polymcp[openai]
+#
+# 3. With Anthropic support:
+#    pip install polymcp[anthropic]
+#
+# 4. With all LLM providers:
+#    pip install polymcp[all-llm]
+#
+# 5. For production deployment (includes Docker):
+#    pip install polymcp[production]
+#
+# 6. For development:
+#    pip install polymcp[dev]
+#
+# 7. With Docker sandbox (secure code execution):
+#    pip install polymcp[docker]
+#
+# 8. Complete installation (all features):
+#    pip install polymcp[all]
