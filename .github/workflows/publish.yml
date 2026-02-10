@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - '!polymcp/**'                          # Codice Python
-      - '!pyproject.toml'                      # Config Python
+      - 'pyproject.toml'                      # Config Python
       - '!MANIFEST.in'                         # IMPORTANTE per packaging
       - '!README.md'                           # Descrizione su PyPI
       - '!LICENSE'                             # Licenza del package
