@@ -338,3 +338,10 @@ export class MCPStdioAdapter {
     }
   }
 }
+
+/**
+ * Factory helper for stdio client creation.
+ */
+export function createMCPClient(config: StdioServerConfig): MCPStdioClient {
+  return new MCPStdioClient(config);
+}
