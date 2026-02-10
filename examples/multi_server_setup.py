@@ -12,10 +12,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from polyagent import PolyAgent, OllamaProvider, OpenAIProvider
-from polymcp_toolkit import expose_tools
-from tools.summarize_tool import summarize, analyze_sentiment, word_count
-from tools.advanced_tools import (
+from polymcp.polyagent import PolyAgent, OllamaProvider, OpenAIProvider
+from polymcp import expose_tools
+from polymcp.tools.summarize_tool import summarize, analyze_sentiment, word_count
+from polymcp.tools.advances_tools import (
     calculate_statistics, format_date, generate_password,
     validate_email, convert_units
 )

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-🎯 UnifiedAgent + Skills System + Playwright Example
-Normal Agent mode con 87% token savings.
+UnifiedAgent + skills.sh + Playwright example (skills.sh only).
 """
 
 import asyncio
@@ -9,56 +8,46 @@ from polymcp.polyagent import UnifiedPolyAgent, OllamaProvider
 
 
 async def main():
-    print("\n" + "="*60)
-    print("🎯 UnifiedAgent + Skills System + Playwright")
-    print("="*60 + "\n")
-    
-    # 1. Playwright MCP server via stdio
+    print("\n" + "=" * 60)
+    print("UnifiedAgent + skills.sh + Playwright")
+    print("=" * 60 + "\n")
+
     stdio_servers = [{
         "command": "npx",
-        "args": ["@playwright/mcp@latest"]
+        "args": ["@playwright/mcp@latest"],
     }]
-    
-    # 2. UnifiedAgent (normal mode) WITH Skills System
-    print("🔧 Initializing UnifiedAgent with Skills...")
+
+    print("Initializing UnifiedAgent with skills.sh only...")
     agent = UnifiedPolyAgent(
         llm_provider=OllamaProvider(model="gpt-oss:120b-cloud"),
         stdio_servers=stdio_servers,
-        skills_enabled=True,        # 🆕 87% token savings
-        skills_dir="./mcp_skills",  # ← Directory delle skills generate
-        verbose=True
+        skills_sh_enabled=True,
+        verbose=True,
     )
-    
-    print("\n✅ Agent initialized with Skills System")
-    print("📊 Skills will load ONLY Playwright tools on-demand\n")
-        
-    # 3. Query automaticamente usa solo Playwright tools
+
     query = "Navigate to example.com and get the title"
-    
-    print(f"🎯 Query: {query}\n")
-    
+    print(f"Query: {query}\n")
+
     async with agent:
         result = await agent.run_async(query)
-    
-    print(f"\n✅ Result: {result}")
-    print(f"\n💡 Token Savings with Skills System:")
-    print(f"   • Without Skills: ~20,000 tokens (all tools)")
-    print(f"   • WITH Skills:     ~2,500 tokens (87% reduction!)")
+
+    print(f"\nResult: {result}")
 
 
 if __name__ == "__main__":
-    print("\n📋 Prerequisites:")
-    print("  1. Generate skills first:")
-    print("     polymcp skills generate --servers 'npx @playwright/mcp@latest' --verbose")
-    print("  2. Ollama running with model:")
+    print("\nPrerequisites:")
+    print("  1. Install at least one skills.sh package:")
+    print("     polymcp skills add vercel-labs/agent-skills")
+    print("  2. Verify installed skills:")
+    print("     polymcp skills list")
+    print("  3. Ollama running with model:")
     print("     ollama run gpt-oss:120b-cloud")
     print()
-    
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n\n👋 Interrupted by user")
+        print("\nInterrupted by user")
     except Exception as e:
-        print(f"\n❌ Fatal error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"\nFatal error: {e}")
+        raise
