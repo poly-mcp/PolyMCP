@@ -30,7 +30,7 @@ async function testHttpServer(url: string, verbose: boolean): Promise<void> {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     spinner.succeed('Connected to HTTP server');
 
     // Show tools

@@ -12,7 +12,7 @@ import { execSync } from 'child_process';
 /**
  * Project types available
  */
-type ProjectType = 'basic' | 'http-server' | 'stdio-server' | 'wasm-server' | 'agent';
+type ProjectType = 'basic' | 'http-server' | 'stdio-server' | 'wasm-server' | 'agent' | 'mcp-app';
 
 /**
  * Init command options
@@ -43,7 +43,7 @@ export async function initCommand(projectName: string, options: InitOptions): Pr
   }
 
   // Validate project type
-  const validTypes: ProjectType[] = ['basic', 'http-server', 'stdio-server', 'wasm-server', 'agent'];
+  const validTypes: ProjectType[] = ['basic', 'http-server', 'stdio-server', 'wasm-server', 'agent', 'mcp-app'];
   if (!validTypes.includes(options.type)) {
     throw new Error(`Invalid project type. Must be one of: ${validTypes.join(', ')}`);
   }
@@ -77,6 +77,9 @@ export async function initCommand(projectName: string, options: InitOptions): Pr
         break;
       case 'agent':
         await generateAgentProject(projectPath, options);
+        break;
+      case 'mcp-app':
+        await generateMCPAppProject(projectPath);
         break;
     }
 
@@ -113,7 +116,7 @@ async function generateBasicProject(projectPath: string, options: InitOptions): 
   const projectName = path.basename(projectPath);
 
   // 1. Package.json
-  const packageJson = {
+  const packageJson: any = {
     name: projectName,
     version: '1.0.0',
     type: 'module',
@@ -126,7 +129,7 @@ async function generateBasicProject(projectPath: string, options: InitOptions): 
       test: 'jest',
     },
     dependencies: {
-      polymcp: '^1.0.0',
+      polymcp: '^1.3.6',
       express: '^4.18.0',
       zod: '^3.22.0',
       dotenv: '^16.0.0',
@@ -145,10 +148,9 @@ async function generateBasicProject(projectPath: string, options: InitOptions): 
     packageJson.dependencies = {
       ...packageJson.dependencies,
       jsonwebtoken: '^9.0.0',
-      bcrypt: '^5.1.0',
+      bcryptjs: '^2.4.3',
     };
     (packageJson.devDependencies as any)['@types/jsonwebtoken'] = '^9.0.0';
-    (packageJson.devDependencies as any)['@types/bcrypt'] = '^5.0.0';
   }
 
   fs.writeJsonSync(
@@ -434,7 +436,7 @@ async function generateHttpServer(projectPath: string, options: InitOptions): Pr
 /**
  * Generate stdio server project (for npm publishing)
  */
-async function generateStdioServer(projectPath: string, options: InitOptions): Promise<void> {
+async function generateStdioServer(projectPath: string, _options: InitOptions): Promise<void> {
   const projectName = path.basename(projectPath);
 
   // 1. Package.json
@@ -453,7 +455,7 @@ async function generateStdioServer(projectPath: string, options: InitOptions): P
       prepublishOnly: 'npm run build',
     },
     dependencies: {
-      polymcp: '^1.0.0',
+      polymcp: '^1.3.6',
       zod: '^3.22.0',
     },
     devDependencies: {
@@ -686,7 +688,7 @@ async function generateWasmServer(projectPath: string, options: InitOptions): Pr
 /**
  * Generate agent project
  */
-async function generateAgentProject(projectPath: string, options: InitOptions): Promise<void> {
+async function generateAgentProject(projectPath: string, _options: InitOptions): Promise<void> {
   const projectName = path.basename(projectPath);
 
   // Package.json
@@ -702,7 +704,7 @@ async function generateAgentProject(projectPath: string, options: InitOptions): 
       start: 'node dist/agent.js',
     },
     dependencies: {
-      polymcp: '^1.0.0',
+      polymcp: '^1.3.6',
       dotenv: '^16.0.0',
       openai: '^4.0.0',
       '@anthropic-ai/sdk': '^0.24.0',
@@ -889,6 +891,230 @@ Agent: [Uses web search tool to find news...]
 }
 
 /**
+ * Generate MCP App project (UI + MCP tools + local live server)
+ */
+async function generateMCPAppProject(projectPath: string): Promise<void> {
+  const projectName = path.basename(projectPath);
+
+  const packageJson = {
+    name: projectName,
+    version: '1.0.0',
+    type: 'module',
+    description: 'PolyMCP MCP App project (UI + tools)',
+    main: 'dist/server.js',
+    scripts: {
+      build: 'tsc',
+      dev: 'tsx src/server.ts',
+      start: 'node dist/server.js',
+    },
+    dependencies: {
+      polymcp: '^1.3.6',
+      express: '^4.18.0',
+    },
+    devDependencies: {
+      '@types/node': '^20.0.0',
+      '@types/express': '^4.17.0',
+      typescript: '^5.0.0',
+      tsx: '^4.0.0',
+    },
+  };
+
+  fs.writeJsonSync(path.join(projectPath, 'package.json'), packageJson, { spaces: 2 });
+
+  const tsconfig = {
+    compilerOptions: {
+      target: 'ES2020',
+      module: 'ESNext',
+      lib: ['ES2020'],
+      outDir: './dist',
+      rootDir: './src',
+      strict: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      moduleResolution: 'node',
+      resolveJsonModule: true,
+      declaration: true,
+    },
+    include: ['src/**/*'],
+    exclude: ['node_modules', 'dist'],
+  };
+
+  fs.writeJsonSync(path.join(projectPath, 'tsconfig.json'), tsconfig, { spaces: 2 });
+
+  const srcDir = path.join(projectPath, 'src');
+  fs.mkdirSync(srcDir);
+
+  const serverCode = `import express from 'express';
+import { MCPAppsBuilder, MCPAppsServer } from 'polymcp';
+
+const PORT = Number(process.env.PORT || 3100);
+
+function createApp() {
+  const builder = new MCPAppsBuilder();
+  let clicks = 0;
+
+  return builder
+    .createApp({
+      id: 'hello-app',
+      name: 'Hello App',
+      description: 'My first MCP App with UI and tools',
+    })
+    .addTool({
+      name: 'hello_user',
+      description: 'Return a greeting',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'User name' },
+        },
+      },
+      handler: async (params: any) => {
+        const name = params?.name || 'friend';
+        return { message: \`Hello, \${name}!\` };
+      },
+    })
+    .addTool({
+      name: 'increment_counter',
+      description: 'Increment local counter',
+      inputSchema: { type: 'object', properties: {} },
+      handler: async () => {
+        clicks += 1;
+        return { clicks };
+      },
+    })
+    .addHTMLResource({
+      name: 'Main UI',
+      html: \`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hello MCP App</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 760px; margin: 0 auto; padding: 24px; }
+      .row { display: flex; gap: 8px; margin: 10px 0; }
+      input { padding: 8px; flex: 1; }
+      button { padding: 8px 12px; cursor: pointer; }
+      #out { white-space: pre-wrap; margin-top: 12px; background: #f5f7fb; border-radius: 8px; padding: 10px; }
+    </style>
+  </head>
+  <body>
+    <h2>Hello MCP App</h2>
+    <div class="row">
+      <input id="name" placeholder="Your name" />
+      <button onclick="callHello()">Say Hello</button>
+      <button onclick="callCounter()">Counter</button>
+    </div>
+    <div id="out">Ready.</div>
+    <script>
+      async function call(tool, params) {
+        const r = await fetch('/tools/' + tool, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params || {})
+        });
+        const data = await r.json();
+        document.getElementById('out').textContent = JSON.stringify(data, null, 2);
+      }
+      function callHello() {
+        const name = document.getElementById('name').value || 'friend';
+        call('hello_user', { name });
+      }
+      function callCounter() {
+        call('increment_counter', {});
+      }
+    </script>
+  </body>
+</html>\`,
+    })
+    .build();
+}
+
+async function main() {
+  const mcp = new MCPAppsServer({ port: PORT, enableCORS: true });
+  const appDef = createApp();
+  mcp.registerApp(appDef);
+  await mcp.start();
+
+  const uiUri = appDef.resources[0]?.uri;
+  const encodedUi = encodeURIComponent(uiUri);
+
+  const app = express();
+  app.use(express.json({ limit: '1mb' }));
+
+  app.get('/', (_req, res) => {
+    res.type('html').send(\`
+      <h3>\${appDef.name}</h3>
+      <ul>
+        <li><a href="/resources/\${encodedUi}">Open UI</a></li>
+        <li><a href="/list_tools">List tools</a></li>
+        <li><a href="/list_resources">List resources</a></li>
+      </ul>\`);
+  });
+
+  app.get('/list_tools', async (_req, res) => {
+    const r = await mcp.handleRequest('GET', '/list_tools');
+    res.status(r.status).set(r.headers).json(r.body);
+  });
+
+  app.get('/list_resources', async (_req, res) => {
+    const r = await mcp.handleRequest('GET', '/list_resources');
+    res.status(r.status).set(r.headers).json(r.body);
+  });
+
+  app.get('/resources/*', async (req, res) => {
+    const suffix = req.originalUrl.replace('/resources/', '');
+    const r = await mcp.handleRequest('GET', '/resources/' + suffix);
+    res.status(r.status).set(r.headers).send(r.body);
+  });
+
+  app.post('/tools/:toolName', async (req, res) => {
+    const r = await mcp.handleRequest('POST', '/tools/' + req.params.toolName, req.body);
+    res.status(r.status).set(r.headers).json(r.body);
+  });
+
+  app.listen(PORT, () => {
+    console.log(\`Live MCP App running at http://localhost:\${PORT}\`);
+    console.log(\`Open UI: http://localhost:\${PORT}/resources/\${encodedUi}\`);
+  });
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+`;
+
+  fs.writeFileSync(path.join(srcDir, 'server.ts'), serverCode);
+
+  const readme = `# ${projectName}
+
+MCP App project created with \`polymcp init --type mcp-app\`.
+
+## Run
+
+\`\`\`bash
+npm install
+npm run dev
+\`\`\`
+
+Then open:
+
+- \`http://localhost:3100/\`
+- \`http://localhost:3100/list_tools\`
+- \`http://localhost:3100/list_resources\`
+
+This project gives you:
+- a local MCP Apps server
+- a browsable UI resource
+- MCP tool endpoints for orchestration from GPT/agents
+`;
+
+  fs.writeFileSync(path.join(projectPath, 'README.md'), readme);
+  fs.writeFileSync(path.join(projectPath, '.gitignore'), 'node_modules/\ndist/\n*.log\n');
+}
+
+/**
  * Validate project name
  */
 function isValidProjectName(name: string): boolean {
@@ -924,6 +1150,11 @@ function showNextSteps(projectName: string, projectType: ProjectType): void {
     case 'agent':
       console.log(chalk.gray('   # Edit .env with your API keys'));
       console.log(chalk.gray('   npm run dev'));
+      break;
+
+    case 'mcp-app':
+      console.log(chalk.gray('   npm run dev'));
+      console.log(chalk.gray('\n   → Open: http://localhost:3100/'));
       break;
   }
 
