@@ -12,9 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from polyagent import PolyAgent, OpenAIProvider, OllamaProvider
-from polymcp_toolkit import expose_tools
-from tools.summarize_tool import summarize, analyze_sentiment, word_count
+from polymcp.polyagent import PolyAgent, OpenAIProvider, OllamaProvider
+from polymcp import expose_tools
+from polymcp.tools.summarize_tool import summarize, analyze_sentiment, word_count
 
 
 def start_mcp_server():

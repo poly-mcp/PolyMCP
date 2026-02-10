@@ -5,7 +5,7 @@ Production-ready test suite for core functionality.
 
 import pytest
 from fastapi.testclient import TestClient
-from polymcp_toolkit import expose_tools
+from polymcp import expose_tools
 
 
 def test_simple_tool_exposure():
