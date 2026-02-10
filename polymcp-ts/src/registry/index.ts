@@ -334,3 +334,9 @@ export function getGlobalRegistry(): ServerRegistry {
 export function resetGlobalRegistry(): void {
   globalRegistry = new ServerRegistry();
 }
+
+/**
+ * Backward-compatible aliases.
+ */
+export class ToolRegistry extends ServerRegistry {}
+export class MultiServerRegistry extends ServerRegistry {}
