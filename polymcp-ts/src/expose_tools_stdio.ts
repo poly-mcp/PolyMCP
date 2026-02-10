@@ -15,7 +15,7 @@
 
 import { z } from 'zod';
 import * as readline from 'readline';
-import { MCPTool, MCPToolMetadata, ToolResult } from '../types';
+import { MCPTool, MCPToolMetadata } from './types';
 
 /**
  * JSON-RPC 2.0 Request
@@ -132,7 +132,6 @@ export class StdioMCPServer {
   private verbose: boolean;
   private initialized: boolean = false;
   private running: boolean = false;
-  private requestIdCounter: number = 0;
   private rl: readline.Interface | null = null;
   
   // Statistics
@@ -168,6 +167,8 @@ export class StdioMCPServer {
     const registry = new Map<string, ToolRegistryEntry>();
 
     for (const tool of tools) {
+      const anyTool = tool as any;
+
       // Validate tool structure
       if (!tool.name) {
         throw new Error('Tool must have a name');
@@ -175,16 +176,18 @@ export class StdioMCPServer {
       if (!tool.description) {
         throw new Error(`Tool '${tool.name}' must have a description`);
       }
-      if (!('parameters' in tool)) {
-        throw new Error(`Tool '${tool.name}' must have parameters`);
+      const rawInputSchema = anyTool.inputSchema ?? anyTool.parameters;
+      if (!rawInputSchema) {
+        throw new Error(`Tool '${tool.name}' must have inputSchema/parameters`);
       }
-      if (!('execute' in tool)) {
-        throw new Error(`Tool '${tool.name}' must have execute function`);
+      const handler = anyTool.function ?? anyTool.execute;
+      if (typeof handler !== 'function') {
+        throw new Error(`Tool '${tool.name}' must have function/execute handler`);
       }
 
-      const inputSchema = tool.parameters instanceof z.ZodSchema 
-        ? tool.parameters 
-        : z.object(tool.parameters as any);
+      const inputSchema = rawInputSchema instanceof z.ZodSchema
+        ? rawInputSchema
+        : z.object(rawInputSchema as any);
 
       const metadata: MCPToolMetadata = {
         name: tool.name,
@@ -194,9 +197,9 @@ export class StdioMCPServer {
 
       registry.set(tool.name, {
         metadata,
-        function: tool.execute,
+        function: handler,
         inputSchema,
-        outputSchema: (tool as any).outputSchema,
+        outputSchema: anyTool.outputSchema,
         isAsync: true, // Assume async by default
       });
     }

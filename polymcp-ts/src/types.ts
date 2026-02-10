@@ -225,6 +225,9 @@ export interface AgentConfig {
   enableHistory?: boolean;
 }
 
+/** Backward-compatible alias for agent configuration. */
+export type AgentOptions = AgentConfig;
+
 /**
  * Agent response
  */

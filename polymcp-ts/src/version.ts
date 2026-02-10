@@ -5,15 +5,15 @@
  * The version follows Semantic Versioning (semver.org).
  */
 
-export const VERSION = '1.2.5';
-
 export const VERSION_INFO = {
-  major: 2,
-  minor: 0,
-  patch: 0,
+  major: 1,
+  minor: 3,
+  patch: 6,
   prerelease: null as string | null,
   build: null as string | null,
 } as const;
+
+export const VERSION = `${VERSION_INFO.major}.${VERSION_INFO.minor}.${VERSION_INFO.patch}`;
 
 /**
  * Get the full version string

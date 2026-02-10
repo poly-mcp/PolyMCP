@@ -10,7 +10,7 @@
  */
 
 import { Express } from 'express';
-import { MCPTool } from '../types';
+import { MCPTool } from './types';
 import { exposeToolsHttp } from './toolkit/expose';
 import { StdioMCPServer } from './expose_tools_stdio';
 
@@ -80,7 +80,20 @@ interface DualModeStats {
  */
 export class DualModeMCPServer {
   private tools: MCPTool[];
-  private options: Required<DualModeOptions>;
+  private options: {
+    name: string;
+    version: string;
+    http: {
+      enabled: boolean;
+      port: number;
+      title: string;
+      description: string;
+    };
+    stdio: {
+      enabled: boolean;
+    };
+    verbose: boolean;
+  };
   
   // Servers
   private httpServer: Express | null = null;
@@ -192,12 +205,12 @@ export class DualModeMCPServer {
     });
 
     // Add custom endpoints
-    this.httpServer.get('/stats', (req, res) => {
+    this.httpServer.get('/stats', (_req, res) => {
       this.stats.uptime = Date.now() - this.startTime;
       res.json(this.stats);
     });
 
-    this.httpServer.get('/health', (req, res) => {
+    this.httpServer.get('/health', (_req, res) => {
       res.json({
         status: 'healthy',
         modes: {

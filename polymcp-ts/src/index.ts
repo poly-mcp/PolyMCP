@@ -34,19 +34,16 @@ export {
 } from './mcp_stdio_client';
 
 // Agent - from agent/
+export { PolyAgent, type PolyAgentConfig } from './agent/agent';
+export { UnifiedPolyAgent, type UnifiedPolyAgentConfig } from './agent/unified_agent';
+export { CodeModeAgent, type CodeModeAgentConfig } from './agent/codemode_agent';
 export {
-  PolyAgent,
-  UnifiedAgent,
-  CodeModeAgent,
-} from './agent/agent';
-
-export {
-  UnifiedAgent as UnifiedAgentClass,
-  CodeModeAgent as CodeModeAgentClass,
+  UnifiedPolyAgent as UnifiedAgent,
+  UnifiedPolyAgent as UnifiedAgentClass,
 } from './agent/unified_agent';
-
 export {
   CodeModeAgent as CodeMode,
+  CodeModeAgent as CodeModeAgentClass,
 } from './agent/codemode_agent';
 
 // LLM Providers - from agent/
@@ -57,7 +54,7 @@ export {
 } from './agent/llm_providers';
 
 // Executor - from executor/
-export { Executor } from './executor/executor';
+export { SandboxExecutor as Executor, SandboxExecutor } from './executor/executor';
 
 // NEW: Docker Executor - from executor/
 export {
@@ -87,43 +84,61 @@ export {
   getCurrentTime,
 } from './tools/advanced';
 
-// NEW: Skills System - from skills/
-export {
-  MCPSkillGenerator,
-  type SkillGeneratorOptions,
-} from './skills/generator';
+// Skills CLI (skills.sh)
+export { runSkillsCli, type SkillsCliOptions } from './skills_cli';
 
+// MCP Apps
 export {
-  MCPSkillLoader,
-  loadSkills,
-  loadAllSkills,
-  type LoadedSkill,
-  type SkillLoaderOptions,
-} from './skills/loader';
-
+  MCPAppsBuilder,
+  MCPAppTemplates,
+  createSimpleApp,
+  type MCPApp,
+  type UIResource,
+  type AppTemplate,
+  UIResourceType,
+} from './mcp_apps/mcp_apps_builder';
 export {
-  MCPSkillMatcher,
-  matchSkills,
-  type SkillMatch,
-  type MatchOptions,
-} from './skills/matcher';
+  MCPAppsServer,
+  MCPAppsServerFactory,
+} from './mcp_apps/mcp_apps_server';
+export {
+  MCPAppBuilder,
+  MCPAppRegistry,
+  UIComponentType,
+  type UIComponent,
+} from './mcp_apps/mcp_apps';
 
 // Registry - from registry/
 export {
+  ServerRegistry,
   ToolRegistry,
   MultiServerRegistry,
+  getGlobalRegistry,
+  resetGlobalRegistry,
 } from './registry';
 
 // Validation - from validation/
 export {
+  validate,
+  validateOrThrow,
   validateToolDefinition,
   validateToolParameters,
+  schemas,
 } from './validation';
 
 // Configuration - from config/
 export {
+  ConfigManager,
   loadConfig,
-  type PolyMCPConfig,
+  getRequiredEnv,
+  getGlobalConfig,
+  initConfig,
+  resetGlobalConfig,
+  loadFromEnv,
+  getDefaultPort,
+  isProduction,
+  isDevelopment,
+  getLogLevel,
 } from './config';
 
 // CLI (programmatic access) - from cli/
@@ -137,5 +152,7 @@ export type {
   ToolResult,
   LLMProvider,
   AgentOptions,
+  AgentConfig,
   ServerStats,
+  PolyMCPConfig,
 } from './types';
