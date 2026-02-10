@@ -26,11 +26,11 @@ const execAsync = promisify(exec);
 export const webSearch = tool({
   name: 'web_search',
   description: 'Search the web for information. Returns search results with titles, URLs, and snippets.',
-  parameters: z.object({
+  inputSchema: z.object({
     query: z.string().describe('Search query'),
     num_results: z.number().optional().default(5).describe('Number of results to return (1-10)'),
   }),
-  execute: async ({ query, num_results }) => {
+  function: async ({ query, num_results }: { query: string; num_results?: number }) => {
     try {
       // In production, integrate with a real search API (Google, Bing, DuckDuckGo, etc.)
       // This is a placeholder implementation
@@ -44,7 +44,7 @@ export const webSearch = tool({
             url: 'https://example.com',
             snippet: 'This is a placeholder. In production, integrate with a real search API.',
           },
-        ],
+        ].slice(0, Math.max(1, Math.min(10, num_results ?? 5))),
         message: 'To enable real web search, configure a search API (Google Custom Search, Bing, etc.)',
       }, null, 2);
     } catch (error: any) {
@@ -60,11 +60,11 @@ export const webSearch = tool({
 export const executeCode = tool({
   name: 'execute_code',
   description: 'Execute JavaScript code in a sandboxed environment. Returns the output and any errors.',
-  parameters: z.object({
+  inputSchema: z.object({
     code: z.string().describe('JavaScript code to execute'),
     timeout: z.number().optional().default(5000).describe('Timeout in milliseconds'),
   }),
-  execute: async ({ code, timeout }) => {
+  function: async ({ code, timeout }: { code: string; timeout?: number }) => {
     try {
       // Use vm2 for sandboxed execution
       const { VM } = require('vm2');
@@ -102,11 +102,11 @@ export const executeCode = tool({
 export const readFile = tool({
   name: 'read_file',
   description: 'Read content from a file. Returns the file content as a string.',
-  parameters: z.object({
+  inputSchema: z.object({
     file_path: z.string().describe('Path to the file to read'),
     encoding: z.string().optional().default('utf-8').describe('File encoding (default: utf-8)'),
   }),
-  execute: async ({ file_path, encoding }) => {
+  function: async ({ file_path, encoding }: { file_path: string; encoding?: string }) => {
     try {
       // Security: validate path (prevent directory traversal)
       const resolvedPath = path.resolve(file_path);
@@ -143,13 +143,23 @@ export const readFile = tool({
 export const writeFile = tool({
   name: 'write_file',
   description: 'Write content to a file. Creates the file if it doesn\'t exist.',
-  parameters: z.object({
+  inputSchema: z.object({
     file_path: z.string().describe('Path to the file to write'),
     content: z.string().describe('Content to write to the file'),
     encoding: z.string().optional().default('utf-8').describe('File encoding (default: utf-8)'),
     append: z.boolean().optional().default(false).describe('Append to file instead of overwriting'),
   }),
-  execute: async ({ file_path, content, encoding, append }) => {
+  function: async ({
+    file_path,
+    content,
+    encoding,
+    append,
+  }: {
+    file_path: string;
+    content: string;
+    encoding?: string;
+    append?: boolean;
+  }) => {
     try {
       // Security: validate path
       const resolvedPath = path.resolve(file_path);
@@ -188,11 +198,11 @@ export const writeFile = tool({
 export const listDirectory = tool({
   name: 'list_directory',
   description: 'List contents of a directory. Returns files and subdirectories.',
-  parameters: z.object({
+  inputSchema: z.object({
     directory_path: z.string().describe('Path to the directory to list'),
     recursive: z.boolean().optional().default(false).describe('List recursively'),
   }),
-  execute: async ({ directory_path, recursive }) => {
+  function: async ({ directory_path, recursive }: { directory_path: string; recursive?: boolean }) => {
     try {
       // Security: validate path
       const resolvedPath = path.resolve(directory_path);
@@ -268,12 +278,12 @@ export const listDirectory = tool({
 export const shellCommand = tool({
   name: 'shell_command',
   description: 'Execute a shell command. Use with caution - only for trusted commands.',
-  parameters: z.object({
+  inputSchema: z.object({
     command: z.string().describe('Shell command to execute'),
     timeout: z.number().optional().default(30000).describe('Timeout in milliseconds'),
     cwd: z.string().optional().describe('Working directory for the command'),
   }),
-  execute: async ({ command, timeout, cwd }) => {
+  function: async ({ command, timeout, cwd }: { command: string; timeout?: number; cwd?: string }) => {
     try {
       // Security: block dangerous commands
       const blockedPatterns = [
@@ -318,14 +328,26 @@ export const shellCommand = tool({
 export const httpRequest = tool({
   name: 'http_request',
   description: 'Make an HTTP request to a URL. Supports GET, POST, PUT, DELETE methods.',
-  parameters: z.object({
+  inputSchema: z.object({
     url: z.string().describe('URL to request'),
     method: z.enum(['GET', 'POST', 'PUT', 'DELETE']).default('GET').describe('HTTP method'),
     headers: z.record(z.string()).optional().describe('HTTP headers'),
     body: z.string().optional().describe('Request body (for POST/PUT)'),
     timeout: z.number().optional().default(30000).describe('Timeout in milliseconds'),
   }),
-  execute: async ({ url, method, headers, body, timeout }) => {
+  function: async ({
+    url,
+    method,
+    headers,
+    body,
+    timeout,
+  }: {
+    url: string;
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    headers?: Record<string, string>;
+    body?: string;
+    timeout?: number;
+  }) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -371,11 +393,11 @@ export const httpRequest = tool({
 export const getCurrentTime = tool({
   name: 'get_current_time',
   description: 'Get the current date and time in various formats.',
-  parameters: z.object({
+  inputSchema: z.object({
     timezone: z.string().optional().describe('Timezone (e.g., "America/New_York")'),
     format: z.enum(['iso', 'unix', 'human']).default('iso').describe('Output format'),
   }),
-  execute: async ({ timezone, format }) => {
+  function: async ({ timezone, format }: { timezone?: string; format?: 'iso' | 'unix' | 'human' }) => {
     const now = new Date();
     
     let formatted: string;
