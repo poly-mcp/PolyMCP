@@ -12,6 +12,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 # Check required environment
 if not os.getenv("MCP_SECRET_KEY"):
     print("❌ ERROR: MCP_SECRET_KEY not found!")
@@ -49,13 +53,13 @@ except:
         def setex(self, key, ttl, value):
             self.data[key] = value
     
-    import polymcp_toolkit.mcp_auth as auth_module
+    import polymcp.polymcp_toolkit.mcp_auth as auth_module
     auth_module.redis_client = MockRedis()
 
 # Now import everything
 import uvicorn
-from polymcp_toolkit import expose_tools_http
-from polymcp_toolkit.mcp_auth import (
+from polymcp.polymcp_toolkit import expose_tools_http
+from polymcp.polymcp_toolkit.mcp_auth import (
     ProductionAuthenticator,
     add_production_auth_to_mcp,
     SessionLocal,

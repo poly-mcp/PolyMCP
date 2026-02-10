@@ -7,7 +7,9 @@ Production-ready tools for text processing and analysis.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def summarize(text: str, max_length: int = 50) -> str:
@@ -68,7 +70,7 @@ def word_count(text: str) -> int:
 def main():
     """Run MCP server with text analysis tools."""
     try:
-        from polymcp_toolkit import expose_tools
+        from polymcp import expose_tools
         import uvicorn
         
         app = expose_tools(
