@@ -4,7 +4,7 @@ For autonomous multi-step execution with enterprise features, use UnifiedPolyAge
 """
 
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterable
 
 import requests
 
@@ -12,6 +12,7 @@ from .llm_providers import LLMProvider
 from .mcp_url import MCPBaseURL
 from .tool_normalize import normalize_tool_metadata
 from .auth_base import AuthProvider
+from .skills_sh import build_skills_context, load_skills_sh
 
 
 class PolyAgent:
@@ -36,6 +37,10 @@ class PolyAgent:
         http_headers: Optional[Dict[str, str]] = None,
         timeout: float = 30.0,
         verbose: bool = False,
+        skills_sh_enabled: bool = True,
+        skills_sh_dirs: Optional[Iterable[str]] = None,
+        skills_sh_max_skills: int = 4,
+        skills_sh_max_chars: int = 5000,
     ):
         """
         Initialize PolyAgent.
@@ -53,6 +58,16 @@ class PolyAgent:
         self.auth = auth_provider
         self.timeout = float(timeout)
         self.verbose = verbose
+
+        # skills.sh integration
+        self.skills_sh_enabled = bool(skills_sh_enabled)
+        self.skills_sh_dirs = list(skills_sh_dirs) if skills_sh_dirs else None
+        self.skills_sh_max_skills = int(skills_sh_max_skills)
+        self.skills_sh_max_chars = int(skills_sh_max_chars)
+        self._skills_sh_entries = load_skills_sh(self.skills_sh_dirs) if self.skills_sh_enabled else []
+        self._skills_sh_warning_shown = False
+        if self.skills_sh_enabled and not self._skills_sh_entries:
+            self._warn_missing_project_skills()
         
         # HTTP session for connection pooling
         self.session = requests.Session()
@@ -73,6 +88,14 @@ class PolyAgent:
         
         # Discover tools
         self._discover_all()
+
+    def _warn_missing_project_skills(self) -> None:
+        if self._skills_sh_warning_shown:
+            return
+        print("[WARN] No project skills found in .agents/skills or .skills.")
+        print("Use global skills: polymcp skills add vercel-labs/agent-skills -g")
+        print("Or local skills: polymcp skills add vercel-labs/agent-skills")
+        self._skills_sh_warning_shown = True
     
     def _load_registry(self, path: str) -> None:
         """Load servers from JSON registry."""
@@ -160,12 +183,23 @@ class PolyAgent:
             lines.append(f"{i}. {t.get('name')}: {t.get('description', '')}")
             lines.append(f"   Schema: {json.dumps(t.get('input_schema', {}))}")
         
+        skills_ctx = ""
+        if self.skills_sh_enabled and self._skills_sh_entries:
+            skills_ctx = build_skills_context(
+                query,
+                self._skills_sh_entries,
+                max_skills=self.skills_sh_max_skills,
+                max_total_chars=self.skills_sh_max_chars,
+            )
+
         prompt = f"""Select the best tool for this request.
 
 Request: {query}
 
 Tools:
 {chr(10).join(lines)}
+
+{skills_ctx}
 
 Respond with JSON only:
 {{

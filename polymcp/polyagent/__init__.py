@@ -1,5 +1,5 @@
 """
-PolyAgent - Intelligent LLM Agent with Skills System
+PolyAgent - Intelligent LLM Agent
 """
 
 # Agents
@@ -17,10 +17,6 @@ from .llm_providers import (
     DeepSeekProvider,
 )
 
-# Skills system components
-from .skill_generator import MCPSkillGenerator
-from .skill_loader import SkillLoader
-from .skill_matcher import SkillMatcher
 
 # Auth (API Key / JWT / OAuth2)
 from .auth_base import AuthProvider, StaticHeadersAuth
@@ -52,8 +48,4 @@ __all__ = [
     "JWTAuthProvider",
     "OAuth2Provider",
 
-    # Skills System
-    "MCPSkillGenerator",
-    "SkillLoader",
-    "SkillMatcher",
 ]

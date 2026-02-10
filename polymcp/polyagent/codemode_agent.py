@@ -24,7 +24,6 @@ import time
 import asyncio
 import logging
 import uuid
-from pathlib import Path
 from dataclasses import dataclass, field
 from typing import (
     List,
@@ -325,8 +324,6 @@ Do NOT include explanations outside the code block.
         tool_denylist: Optional[Set[str]] = None,
         seccomp_profile: Optional[str] = None,
         apparmor_profile: Optional[str] = None,
-        skills_enabled: bool = False,  # preserved
-        skills_dir: Optional[Path] = None,
     ) -> None:
         self.llm_provider = llm_provider
         self.mcp_servers = list(mcp_servers or [])
@@ -377,13 +374,6 @@ Do NOT include explanations outside the code block.
 
         # Discover HTTP tools
         self._discover_http_tools()
-
-        # Skills system (optional) preserved
-        self._skills_enabled = False
-        self._skill_loader = None
-        self._skill_matcher = None
-        if skills_enabled:
-            self._init_skills_system(skills_dir)
 
     # ===================== HTTP session =====================
 
@@ -455,44 +445,6 @@ Do NOT include explanations outside the code block.
         response.raise_for_status()
         data = response.json()
         return data.get("tools", [])
-
-    # ===================== Skills system (optional, preserved) =====================
-
-    def _init_skills_system(self, skills_dir: Optional[Path]) -> None:
-        try:
-            from .skill_loader import SkillLoader
-            from .skill_matcher import SkillMatcher
-
-            default_dir = Path.home() / ".polymcp" / "skills"
-            skills_path = skills_dir or default_dir
-
-            if not skills_path.exists():
-                if self.config.verbose:
-                    logger.info("Skills directory not found: %s", skills_path)
-                return
-
-            self._skill_loader = SkillLoader(
-                skills_dir=skills_path,
-                lazy_load=True,
-                verbose=self.config.verbose,
-            )
-
-            self._skill_matcher = SkillMatcher(
-                skill_loader=self._skill_loader,
-                use_fuzzy_matching=True,
-                verbose=self.config.verbose,
-            )
-
-            self._skills_enabled = True
-
-            if self.config.verbose:
-                total = self._skill_loader.get_total_skills()
-                logger.info("Skills system enabled (%d skills)", total)
-
-        except ImportError:
-            logger.debug("Skills modules not available")
-        except Exception as e:
-            logger.warning("Failed to initialize skills system: %s", e)
 
     # ===================== Async stdio servers =====================
 
@@ -576,33 +528,7 @@ Do NOT include explanations outside the code block.
 
     def _select_relevant_tools(self, query: str, max_tools: int = 15) -> List[Dict[str, Any]]:
         all_tools = self._get_all_tools()
-        if not self._skills_enabled or not self._skill_matcher:
-            return all_tools[:max_tools]
-
-        try:
-            relevant_skills = self._skill_matcher.match_query(query, top_k=max_tools)
-
-            relevant_tool_names: Set[str] = set()
-            for skill, _confidence in relevant_skills:
-                if hasattr(skill, "tools") and skill.tools:
-                    for tool_info in skill.tools:
-                        if isinstance(tool_info, dict):
-                            relevant_tool_names.add(tool_info.get("name", ""))
-                        elif isinstance(tool_info, str):
-                            relevant_tool_names.add(tool_info)
-
-            selected: List[Dict[str, Any]] = []
-            for tool in all_tools:
-                if tool.get("name") in relevant_tool_names:
-                    selected.append(tool)
-                    if len(selected) >= max_tools:
-                        break
-
-            return selected if selected else all_tools[:max_tools]
-
-        except Exception as e:
-            logger.debug("Skill matching failed: %s", e)
-            return all_tools[:max_tools]
+        return all_tools[:max_tools]
 
     def _generate_tools_documentation(self, query: Optional[str] = None) -> str:
         if query:

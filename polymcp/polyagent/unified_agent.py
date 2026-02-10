@@ -1,6 +1,49 @@
 #!/usr/bin/env python3
 """
-Unified PolyAgent
+Unified PolyAgent - FULLY AGENTIC Edition (v3.4) 🚀
+
+COMPLETELY AUTONOMOUS & 100% GENERIC AGENT
+
+Works with ANY MCP server:
+- ✅ Playwright (browser automation)
+- ✅ Filesystem tools
+- ✅ Database tools
+- ✅ API tools
+- ✅ ANY custom MCP server
+
+NO hardcoded logic for specific tools!
+NO special treatment for any server!
+
+The agent decides EVERYTHING:
+- ✅ When to stop
+- ✅ Which tools to use
+- ✅ How many times to retry
+- ✅ What workflow to follow
+
+NO built-in stop conditions except:
+- Budget limits (if set)
+- Manual cancellation
+- 3+ consecutive failures (safety net)
+
+REMOVED ALL CONSTRAINTS:
+- ❌ "Stalled: identical results" - REMOVED
+- ❌ "Semantic repetition" - REMOVED
+- ❌ Tool-specific constraints - REMOVED
+- ❌ Hardcoded workflows - REMOVED
+- ❌ Tool-specific hints - REMOVED
+- ❌ Auto-recovery for specific tools - REMOVED
+
+Best of both worlds + FULL AUTONOMY:
+- ✅ Robustness from v3.0
+- ✅ Security features from v2.3
+- ✅ Soft planning mode (hints, not commands)
+- ✅ Conservative validation (checks progress)
+- ✅ JSON-RPC support (generic, not Playwright-specific)
+- ✅ FULLY AGENTIC (learns from experience)
+- ✅ 100% GENERIC (works with ANY MCP server)
+
+Philosophy: The agent learns through TRIAL & ERROR, not through imposed rules!
+No favoritism for any specific tools or servers!
 """
 
 from __future__ import annotations
@@ -18,22 +61,14 @@ from collections import defaultdict, deque
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
 from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 
 import httpx
 
 from .llm_providers import LLMProvider
+from .skills_sh import build_skills_context, load_skills_sh
 from ..mcp_stdio_client import MCPServerConfig, MCPStdioAdapter, MCPStdioClient
 from .mcp_url import MCPBaseURL
-
-# Skills System Integration (optional)
-try:
-    from .skill_loader import SkillLoader
-    from .skill_matcher import SkillMatcher
-    SKILLS_AVAILABLE = True
-except Exception:
-    SKILLS_AVAILABLE = False
 
 # Token estimation (optional)
 try:
@@ -574,8 +609,10 @@ Rules:
         verbose: bool = False,
         memory_enabled: bool = True,
         http_headers: Optional[Dict[str, str]] = None,
-        skills_enabled: bool = False,
-        skills_dir: Optional[str] = "./mcp_skills",
+        skills_sh_enabled: bool = True,
+        skills_sh_dirs: Optional[List[str]] = None,
+        skills_sh_max_skills: int = 4,
+        skills_sh_max_chars: int = 5000,
         # Budget
         max_wall_time: float = 300.0,
         max_tokens: int = 100000,
@@ -608,6 +645,11 @@ Rules:
         validation_mode: str = "conservative",  # ✅ CONSERVATIVE by default
         goal_achievement_threshold: float = 0.85,  # ✅ Higher threshold (was 0.7)
         planner_max_tools: int = 50,  # ✅ More tools for planner (was 30)
+        # Never-stuck controls
+        never_stuck_mode: bool = True,
+        max_no_progress_steps: int = 4,
+        tool_cooldown_steps: int = 2,
+        loop_guard_window: int = 8,
     ) -> None:
         self.llm_provider = llm_provider
         self.mcp_servers = mcp_servers or []
@@ -642,6 +684,14 @@ Rules:
         self.max_relevant_tools = max_relevant_tools
         self.goal_achievement_threshold = goal_achievement_threshold
         self.planner_max_tools = planner_max_tools
+        self.never_stuck_mode = never_stuck_mode
+        self.max_no_progress_steps = max_no_progress_steps
+        self.tool_cooldown_steps = tool_cooldown_steps
+        self.loop_guard_window = max(4, int(loop_guard_window))
+        self._no_progress_steps = 0
+        self._tool_cooldowns: Dict[str, int] = {}
+        self._recent_call_signatures: Deque[str] = deque(maxlen=self.loop_guard_window)
+        self._recent_result_signatures: Deque[str] = deque(maxlen=self.loop_guard_window)
 
         # Budget
         self.budget = Budget(
@@ -691,64 +741,36 @@ Rules:
         # Cancellation
         self._cancellation_token = asyncio.Event()
 
-        # Skills System
-        self.skills_enabled = skills_enabled and SKILLS_AVAILABLE
-        self.skill_loader: Optional[SkillLoader] = None
-        self.skill_matcher: Optional[SkillMatcher] = None
-
-        if self.skills_enabled:
-            self._init_skills_system(skills_dir, verbose)
+        # skills.sh integration (prompt-only)
+        self.skills_sh_enabled = bool(skills_sh_enabled)
+        self.skills_sh_dirs = skills_sh_dirs or None
+        self.skills_sh_max_skills = int(skills_sh_max_skills)
+        self.skills_sh_max_chars = int(skills_sh_max_chars)
+        self._skills_sh_entries = load_skills_sh(self.skills_sh_dirs) if self.skills_sh_enabled else []
+        self._skills_sh_warning_shown = False
+        if self.skills_sh_enabled and not self._skills_sh_entries:
+            self._warn_missing_project_skills()
 
         if registry_path:
             self._load_registry(registry_path)
 
-    def _init_skills_system(self, skills_dir: Optional[str], verbose: bool) -> None:
-        """Initialize the skills system safely."""
-        if not SKILLS_AVAILABLE:
-            self.skills_enabled = False
-            if verbose:
-                print("⚠️ Skills System not available (missing dependencies)")
+    def _get_skills_sh_context(self, user_message: str) -> str:
+        if not self.skills_sh_enabled or not self._skills_sh_entries:
+            return ""
+        return build_skills_context(
+            user_message,
+            self._skills_sh_entries,
+            max_skills=self.skills_sh_max_skills,
+            max_total_chars=self.skills_sh_max_chars,
+        )
+
+    def _warn_missing_project_skills(self) -> None:
+        if self._skills_sh_warning_shown:
             return
-
-        if skills_dir is None:
-            skills_dir = "./mcp_skills"
-
-        if isinstance(skills_dir, str):
-            skills_path = Path(skills_dir)
-        elif isinstance(skills_dir, Path):
-            skills_path = skills_dir
-        else:
-            self.skills_enabled = False
-            if verbose:
-                print(f"⚠️ Invalid skills_dir type: {type(skills_dir)}")
-            return
-
-        if not skills_path.exists():
-            self.skills_enabled = False
-            if verbose:
-                print(f"⚠️ Skills directory not found: {skills_path.absolute()}")
-            return
-
-        if not skills_path.is_dir():
-            self.skills_enabled = False
-            if verbose:
-                print(f"⚠️ Skills path is not a directory: {skills_path}")
-            return
-
-        try:
-            self.skill_loader = SkillLoader(skills_dir=str(skills_path), verbose=verbose)
-            self.skill_matcher = SkillMatcher(debug=verbose)
-
-            total_skills = self.skill_loader.get_total_skills()
-            if verbose:
-                print(f"✅ Skills System enabled ({total_skills} skills from {skills_path})")
-
-        except Exception as e:
-            self.skills_enabled = False
-            self.skill_loader = None
-            self.skill_matcher = None
-            if verbose:
-                print(f"⚠️ Skills System init failed: {e}")
+        print("[WARN] No project skills found in .agents/skills or .skills.")
+        print("Use global skills: polymcp skills add vercel-labs/agent-skills -g")
+        print("Or local skills: polymcp skills add vercel-labs/agent-skills")
+        self._skills_sh_warning_shown = True
 
     # -------------------------------------------------------------------------
     # Logging / Registry
@@ -1623,7 +1645,22 @@ Rules:
             return {"_compressed": True, "_original_size": len(result_str), "value": str(result)[:max_size]}
 
         compressed: Dict[str, Any] = {}
-        priority_fields = ["status", "success", "error", "message", "data", "result", "summary"]
+        priority_fields = [
+            "status",
+            "success",
+            "error",
+            "message",
+            "summary",
+            "content",
+            "messages",
+            "result",
+            "data",
+            "output",
+            "text",
+            "value",
+            "answer",
+            "final_answer",
+        ]
 
         for field_name in priority_fields:
             if field_name not in result:
@@ -1736,6 +1773,148 @@ Rules:
         all_tools.sort(key=lambda t: (-t.get("_success_rate", 0.5), t.get("_avg_latency", 9999.0), t.get("name", "")))
         return all_tools
 
+    def _value_has_meaningful_content(self, value: Any, max_depth: int = 4) -> bool:
+        if max_depth <= 0:
+            return bool(value)
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (int, float, bool)):
+            return True
+        if isinstance(value, list):
+            return any(self._value_has_meaningful_content(v, max_depth - 1) for v in value)
+        if isinstance(value, dict):
+            if not value:
+                return False
+            ignorable = {
+                "status", "success", "ok", "latency", "duration", "metadata",
+                "_compressed", "_original_size"
+            }
+            for k, v in value.items():
+                if str(k).lower() in ignorable:
+                    continue
+                if self._value_has_meaningful_content(v, max_depth - 1):
+                    return True
+            return False
+        return True
+
+    def _result_signal_label(self, result: Optional[Dict[str, Any]]) -> str:
+        if not isinstance(result, dict) or not result:
+            return "no data"
+
+        key_hints = [
+            ("content", "content"),
+            ("result", "result"),
+            ("data", "data"),
+            ("message", "message"),
+            ("messages", "messages"),
+            ("text", "text"),
+            ("output", "output"),
+            ("value", "value"),
+            ("answer", "answer"),
+            ("final_answer", "final_answer"),
+        ]
+        for key, label in key_hints:
+            if key in result and self._value_has_meaningful_content(result.get(key)):
+                return f"has {label}"
+
+        if self._value_has_meaningful_content(result):
+            return "has output"
+
+        return "EMPTY OUTPUT"
+
+    def _value_preview_text(self, value: Any, max_depth: int = 4, max_chars: int = 180) -> str:
+        if max_depth <= 0 or value is None:
+            return ""
+
+        if isinstance(value, str):
+            compact = re.sub(r"\s+", " ", value).strip()
+            if not compact:
+                return ""
+            return compact if len(compact) <= max_chars else compact[:max_chars] + "..."
+
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+
+        if isinstance(value, list):
+            parts: List[str] = []
+            for item in value:
+                chunk = self._value_preview_text(item, max_depth=max_depth - 1, max_chars=max_chars)
+                if chunk:
+                    parts.append(chunk)
+                if len(parts) >= 3:
+                    break
+            joined = " | ".join(parts)
+            if not joined:
+                return ""
+            return joined if len(joined) <= max_chars else joined[:max_chars] + "..."
+
+        if isinstance(value, dict):
+            if "text" in value:
+                text_preview = self._value_preview_text(value.get("text"), max_depth=max_depth - 1, max_chars=max_chars)
+                if text_preview:
+                    return text_preview
+
+            preferred_keys = (
+                "final_answer",
+                "answer",
+                "content",
+                "result",
+                "data",
+                "output",
+                "value",
+                "message",
+                "text",
+            )
+            for key in preferred_keys:
+                if key in value:
+                    chunk = self._value_preview_text(value.get(key), max_depth=max_depth - 1, max_chars=max_chars)
+                    if chunk:
+                        return chunk
+
+            for key, child in value.items():
+                if str(key).lower() in {"status", "success", "ok", "latency", "duration", "metadata"}:
+                    continue
+                chunk = self._value_preview_text(child, max_depth=max_depth - 1, max_chars=max_chars)
+                if chunk:
+                    return chunk
+
+        return ""
+
+    def _result_preview_text(self, result: Optional[Dict[str, Any]], max_chars: int = 180) -> str:
+        if not isinstance(result, dict) or not result:
+            return ""
+        safe = SecurityPolicy.redact_sensitive_data(result)
+        compressed = self._compress_tool_output(safe, max_size=800)
+        return self._value_preview_text(compressed, max_depth=4, max_chars=max_chars)
+
+    @staticmethod
+    def _response_mentions_key_preview(response_text: str, key_previews: List[str]) -> bool:
+        if not response_text or not key_previews:
+            return False
+
+        response_lower = response_text.lower()
+        for preview in key_previews:
+            if not preview:
+                continue
+
+            preview_lower = preview.lower()
+            # Direct phrase coverage (best signal, generic for any tool output)
+            if preview_lower in response_lower:
+                return True
+
+            # Token overlap coverage for paraphrased responses
+            tokens = [t for t in re.findall(r"[a-z0-9][a-z0-9._-]{2,}", preview_lower) if len(t) >= 4]
+            if not tokens:
+                continue
+
+            overlap = sum(1 for t in tokens if t in response_lower)
+            if overlap >= min(2, len(tokens)):
+                return True
+
+        return False
+
     # =========================================================================
     # FIXED PLANNER & VALIDATOR
     # =========================================================================
@@ -1770,11 +1949,12 @@ Rules:
                 result_preview = ""
                 if r.is_success():
                     if r.result and isinstance(r.result, dict):
-                        content = r.result.get("content")
-                        if content:
-                            result_preview = f" (has content: {str(content)[:100]})"
+                        signal = self._result_signal_label(r.result)
+                        preview = self._result_preview_text(r.result, max_chars=120)
+                        if preview:
+                            result_preview = f" ({signal}; preview: {preview})"
                         else:
-                            result_preview = " (EMPTY CONTENT)"
+                            result_preview = f" ({signal})"
                 else:
                     # ✅ INCLUDE ERROR MESSAGE (with hints!) so planner learns
                     if r.error:
@@ -1784,7 +1964,10 @@ Rules:
             
             feedback = f"\n\nRECENT RESULTS:\n" + "\n".join(feedback_lines)
 
+        skills_ctx = self._get_skills_sh_context(user_message)
+
         prompt = f"""{self.PLANNER_SYSTEM}
+{skills_ctx}
 
 AVAILABLE TOOLS:
 {tools_section}
@@ -1840,35 +2023,7 @@ JSON only:"""
         
         if len(all_tools) <= max_tools:
             return all_tools
-        
-        if self.skill_matcher and self.skill_loader:
-            try:
-                skills_dict = self.skill_loader.load_all()
-                if skills_dict:
-                    index = self.skill_matcher.build_index_from_skills(skills_dict)
-                    results = self.skill_matcher.match_index(user_message, index, top_k=max_tools)
-                    
-                    relevant_tools: List[Dict[str, Any]] = []
-                    seen: Set[Tuple[str, str]] = set()
-                    
-                    for match_result in results:
-                        tool_name = match_result.tool_name
-                        if tool_name in self.tool_registry:
-                            for inst in self.tool_registry[tool_name]:
-                                sid = inst["_server_url"]
-                                key = (sid, tool_name)
-                                if key in seen:
-                                    continue
-                                seen.add(key)
-                                relevant_tools.append(inst)
-                    
-                    if relevant_tools:
-                        self._log("DEBUG", "planner_tools_filtered", {"total": len(all_tools), "filtered": len(relevant_tools)})
-                        return relevant_tools
-                        
-            except Exception as e:
-                self._log("WARNING", "planner_filter_failed", {"error": str(e)})
-        
+
         return all_tools[:max_tools]
     
     def _build_tools_list_for_planner(self, tools: List[Dict[str, Any]]) -> str:
@@ -1910,9 +2065,14 @@ JSON only:"""
             if r.is_success():
                 # ✅ FIX: Check if result has meaningful content
                 if r.result and isinstance(r.result, dict):
-                    content = r.result.get("content")
-                    has_content = "has content" if content else "EMPTY CONTENT"
-                    results_summary.append(f"- {action['tool']}: success ({has_content})")
+                    output_signal = self._result_signal_label(r.result)
+                    preview = self._result_preview_text(r.result, max_chars=180)
+                    if preview:
+                        results_summary.append(
+                            f"- {action['tool']}: success ({output_signal}); preview: {preview}"
+                        )
+                    else:
+                        results_summary.append(f"- {action['tool']}: success ({output_signal})")
                 else:
                     results_summary.append(f"- {action['tool']}: success (no data)")
             else:
@@ -1928,7 +2088,7 @@ WHAT WAS DONE (with actual results):
 {results_block}
 
 IMPORTANT: Check if actions produced MEANINGFUL results, not just "success" status.
-Empty content means the action didn't actually work!
+Empty output means the action didn't actually work!
 
 JSON only:"""
 
@@ -1953,11 +2113,89 @@ JSON only:"""
     # FIXED TOOL SELECTION
     # =========================================================================
 
+    def _normalize_for_fingerprint(self, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: self._normalize_for_fingerprint(value[k]) for k in sorted(value)}
+        if isinstance(value, list):
+            return [self._normalize_for_fingerprint(v) for v in value]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        return str(value)
+
+    def _make_call_signature(self, tool_name: str, parameters: Dict[str, Any]) -> str:
+        normalized = self._normalize_for_fingerprint(parameters or {})
+        payload = json.dumps({"tool": tool_name, "params": normalized}, sort_keys=True, default=str)
+        return hashlib.md5(payload.encode("utf-8")).hexdigest()
+
+    def _make_result_signature(self, result: AgentResult) -> str:
+        if not result.is_success():
+            payload = json.dumps(
+                {"status": "error", "error": (result.error or "").strip()[:300]},
+                sort_keys=True,
+                default=str,
+            )
+            return hashlib.md5(payload.encode("utf-8")).hexdigest()
+
+        normalized_result = self._normalize_for_fingerprint(self._compress_tool_output(result.result or {}, max_size=600))
+        payload = json.dumps({"status": "success", "result": normalized_result}, sort_keys=True, default=str)
+        return hashlib.md5(payload.encode("utf-8")).hexdigest()
+
+    def _mark_tool_cooldown(self, tool_name: str, current_step: int) -> None:
+        self._tool_cooldowns[tool_name] = current_step + max(1, int(self.tool_cooldown_steps))
+
+    def _is_tool_on_cooldown(self, tool_name: str, current_step: int) -> bool:
+        release_step = self._tool_cooldowns.get(tool_name)
+        if release_step is None:
+            return False
+        if current_step >= release_step:
+            self._tool_cooldowns.pop(tool_name, None)
+            return False
+        return True
+
+    def _update_loop_guard(
+        self,
+        tool_name: str,
+        parameters: Dict[str, Any],
+        result: AgentResult,
+        current_step: int,
+    ) -> Dict[str, Any]:
+        call_sig = self._make_call_signature(tool_name, parameters)
+        result_sig = self._make_result_signature(result)
+
+        repeated_call = call_sig in self._recent_call_signatures
+        repeated_result = result_sig in self._recent_result_signatures
+        failed = not result.is_success()
+        no_progress = failed or repeated_result
+
+        self._recent_call_signatures.append(call_sig)
+        self._recent_result_signatures.append(result_sig)
+
+        if no_progress:
+            self._no_progress_steps += 1
+        else:
+            self._no_progress_steps = 0
+
+        cooldown_applied = False
+        if self.never_stuck_mode and (failed or (repeated_call and repeated_result)):
+            self._mark_tool_cooldown(tool_name, current_step)
+            cooldown_applied = True
+
+        hard_stall = self._no_progress_steps >= max(2, self.max_no_progress_steps)
+        return {
+            "repeated_call": repeated_call,
+            "repeated_result": repeated_result,
+            "failed": failed,
+            "no_progress_steps": self._no_progress_steps,
+            "cooldown_applied": cooldown_applied,
+            "hard_stall": hard_stall,
+        }
+
     def _select_tool_with_constraints(
         self,
         all_tools: List[Dict[str, Any]],
         action_history: List[Dict[str, Any]],
-        plan_step: Optional[Dict[str, Any]] = None
+        plan_step: Optional[Dict[str, Any]] = None,
+        current_step: int = 0,
     ) -> Optional[Dict[str, Any]]:
         """
         Tool selection with SOFT planning support.
@@ -2006,6 +2244,9 @@ JSON only:"""
             if self.enable_health_checks and server_url in self.server_health:
                 if not self.server_health[server_url].can_use():
                     continue
+
+            if self.never_stuck_mode and self._is_tool_on_cooldown(tool_name, current_step):
+                continue
 
             valid_tools.append(tool)
 
@@ -2092,6 +2333,15 @@ JSON only:"""
                     "reason": "browser actions already working without tabs"
                 })
 
+        # Never-stuck mode: avoid immediate same-tool repetition when alternatives exist
+        if self.never_stuck_mode and action_history and len(valid_tools) > 1:
+            last_tool = action_history[-1]["tool"]
+            if valid_tools[0]["name"] == last_tool:
+                for candidate in valid_tools[1:]:
+                    if candidate["name"] != last_tool:
+                        self._log("INFO", "tool_rotation_applied", {"from": last_tool, "to": candidate["name"]})
+                        return candidate
+
         # ✅ FIX: ALWAYS return best available tool (sorted by success rate)
         return valid_tools[0] if valid_tools else None
 
@@ -2129,6 +2379,9 @@ JSON only:"""
                 
         if consecutive_failures >= 3:
             return True, f"{consecutive_failures} consecutive failures"
+
+        if self.never_stuck_mode and self._no_progress_steps >= max(self.max_no_progress_steps + 2, 6):
+            return True, f"No progress after {self._no_progress_steps} steps"
 
         # ✅ REMOVED: "Stalled: identical results" check
         # Agent can now continue even with identical results
@@ -2356,7 +2609,10 @@ JSON only:"""
                     ctx = "\n\nCONTEXT FROM PREVIOUS TOOLS:\n" + "\n---\n".join(ctx_lines) + "\n"
                     ctx += "\nIMPORTANT: If you need a 'ref' parameter, look for it in the content above!\n"
 
+        skills_ctx = self._get_skills_sh_context(user_message)
+
         prompt = f"""{self.PARAMETER_EXTRACTION_SYSTEM}
+{skills_ctx}
 
 Tool: {tool_name}
 Schema:
@@ -2392,6 +2648,7 @@ Return ONLY a JSON object."""
             return "I couldn't find any suitable tools to complete your request."
 
         blocks = []
+        key_previews: List[str] = []
         for action in action_history:
             res: AgentResult = action["result"]
             step_num = action["step"]
@@ -2399,12 +2656,20 @@ Return ONLY a JSON object."""
             if res.is_success():
                 safe = SecurityPolicy.redact_sensitive_data(res.result or {})
                 compressed = self._compress_tool_output(safe, max_size=400)
-                blocks.append(f"Step {step_num} ({tool_name}): {json.dumps(compressed, default=str)}")
+                preview = self._result_preview_text(safe, max_chars=220)
+                if preview:
+                    key_previews.append(f"Step {step_num}: {preview}")
+                    blocks.append(
+                        f"Step {step_num} ({tool_name}): {json.dumps(compressed, default=str)} | preview: {preview}"
+                    )
+                else:
+                    blocks.append(f"Step {step_num} ({tool_name}): {json.dumps(compressed, default=str)}")
             else:
                 blocks.append(f"Step {step_num} ({tool_name}): FAILED - {res.error or 'Unknown error'}")
 
         success_count = sum(1 for a in action_history if a["result"].is_success())
         blocks_text = "\n".join(blocks)
+        previews_text = "\n".join(f"- {p}" for p in key_previews) if key_previews else "- none"
 
         prompt = f"""{self.FINAL_RESPONSE_SYSTEM}
 
@@ -2413,12 +2678,25 @@ USER'S REQUEST: "{user_message}"
 MY ACTIONS (what I did):
 {blocks_text}
 
+KEY OUTPUT PREVIEWS (authoritative values extracted from tool results):
+{previews_text}
+
+IMPORTANT:
+- If a key output preview contains the requested value, include it explicitly in the final response.
+- Do not claim data is unavailable when key previews contain the value.
+
 Now respond to the user in FIRST PERSON:"""
 
         try:
             self.budget.add_tokens(TokenEstimator.estimate_tokens(prompt))
             resp = self.llm_provider.generate(prompt).strip()
             self.budget.add_tokens(TokenEstimator.estimate_tokens(resp))
+            if key_previews and not self._response_mentions_key_preview(resp, key_previews):
+                # Generic grounding guard: append authoritative outputs if response omits them.
+                joined = "; ".join(key_previews[:3])
+                if resp:
+                    return f"{resp}\n\nKey outputs: {joined}"
+                return f"I completed the request. Key outputs: {joined}"
             return resp
         except Exception as e:
             self._log("ERROR", "response_generation_failed", {"error": str(e)})
@@ -2447,6 +2725,10 @@ Now respond to the user in FIRST PERSON:"""
         self._cancellation_token.clear()
         self.budget.reset()
         self._plan_failures = 0
+        self._no_progress_steps = 0
+        self._tool_cooldowns.clear()
+        self._recent_call_signatures.clear()
+        self._recent_result_signatures.clear()
 
         self._log("INFO", "run_started", {"user_message": user_message, "max_steps": max_steps})
         self.budget.add_tokens(TokenEstimator.estimate_tokens(user_message))
@@ -2486,7 +2768,7 @@ Now respond to the user in FIRST PERSON:"""
                     # High confidence threshold after 3+ steps
                     threshold = self.goal_achievement_threshold if step >= 3 else 0.95
                     
-                    if achieved and conf > threshold:
+                    if achieved and conf >= threshold:
                         self._log("INFO", "goal_achieved", {"confidence": conf, "reason": why})
                         stream_callback({"event": "goal_achieved", "confidence": conf})
                         break
@@ -2494,16 +2776,13 @@ Now respond to the user in FIRST PERSON:"""
             elif self.use_validator and self.validation_mode == ValidationMode.AGGRESSIVE and step > 0:
                 # Aggressive mode (like original File 2)
                 achieved, conf, why = await self._validate_goal_achieved(user_message, action_history)
-                if achieved and conf > self.goal_achievement_threshold:
+                if achieved and conf >= self.goal_achievement_threshold:
                     self._log("INFO", "goal_achieved", {"confidence": conf, "reason": why})
                     stream_callback({"event": "goal_achieved", "confidence": conf})
                     break
 
             # Get tools
-            if self.skills_enabled:
-                all_tools = await self._get_relevant_tools(user_message, max_tools=self.max_relevant_tools)
-            else:
-                all_tools = await self._get_all_tools()
+            all_tools = await self._get_all_tools()
 
             if not all_tools:
                 self._log("WARNING", "no_tools_available", {})
@@ -2517,13 +2796,23 @@ Now respond to the user in FIRST PERSON:"""
                     stream_callback({"event": "plan_updated", "plan": self.current_plan})
 
             plan_step = self.current_plan[step] if self.current_plan and step < len(self.current_plan) else None
-            selected_tool = self._select_tool_with_constraints(all_tools, action_history, plan_step)
+            selected_tool = self._select_tool_with_constraints(
+                all_tools,
+                action_history,
+                plan_step,
+                current_step=current_step,
+            )
 
             # ✅ FIX: Fallback to free selection if planning fails
             if not selected_tool and self.planning_mode != PlanningMode.OFF:
                 self._log("WARNING", "planning_failed_fallback_to_free", {"step": step})
                 self.planning_mode = PlanningMode.OFF  # Temporarily disable planning
-                selected_tool = self._select_tool_with_constraints(all_tools, action_history, None)
+                selected_tool = self._select_tool_with_constraints(
+                    all_tools,
+                    action_history,
+                    None,
+                    current_step=current_step,
+                )
                 self.planning_mode = PlanningMode.SOFT  # Re-enable soft planning
 
             if not selected_tool:
@@ -2549,6 +2838,30 @@ Now respond to the user in FIRST PERSON:"""
                 "result": result,
             })
 
+            guard = self._update_loop_guard(
+                selected_tool["name"],
+                selected_tool.get("_parameters", {}) or {},
+                result,
+                current_step,
+            )
+            if guard["cooldown_applied"]:
+                self._log(
+                    "WARNING",
+                    "loop_guard_cooldown_applied",
+                    {
+                        "tool": selected_tool["name"],
+                        "no_progress_steps": guard["no_progress_steps"],
+                        "repeated_call": guard["repeated_call"],
+                        "repeated_result": guard["repeated_result"],
+                    },
+                )
+                stream_callback({"event": "loop_guard", "tool": selected_tool["name"], "action": "cooldown"})
+                self._plan_failures = max(self._plan_failures, 2)
+            elif not result.is_success():
+                self._plan_failures += 1
+            else:
+                self._plan_failures = 0
+
             await asyncio.sleep(0.15)
 
         # Update memory
@@ -2569,53 +2882,6 @@ Now respond to the user in FIRST PERSON:"""
         
         stream_callback({"event": "completed", "response": response})
         return response
-
-    async def _get_relevant_tools(self, query: str, max_tools: int = 10) -> List[Dict[str, Any]]:
-        if not self.skills_enabled or not self.skill_matcher or not self.skill_loader:
-            return await self._get_all_tools()
-
-        try:
-            skills_dict: Dict[str, Dict[str, Any]] = {}
-            for category in self.skill_loader.get_available_categories():
-                try:
-                    skill = self.skill_loader.load_skill(category)
-                    if skill and skill.tools:
-                        skills_dict[category] = {"tools": skill.tools}
-                except Exception:
-                    continue
-
-            if not skills_dict:
-                return await self._get_all_tools()
-
-            index = self.skill_matcher.build_index_from_skills(skills_dict)
-            results = self.skill_matcher.match_index(query, index, top_k=max_tools)
-
-            self._log("INFO", "skills_matched", {"count": len(results)})
-
-            await self._refresh_stdio_tools_cache()
-
-            relevant_tools: List[Dict[str, Any]] = []
-            seen: Set[Tuple[str, str]] = set()
-
-            for match_result in results:
-                tool_name = match_result.tool_name
-                if tool_name in self.tool_registry:
-                    for inst in self.tool_registry[tool_name]:
-                        sid = inst["_server_url"]
-                        key = (sid, tool_name)
-                        if key in seen:
-                            continue
-                        seen.add(key)
-
-                        twm = dict(inst)
-                        twm["_skill_confidence"] = match_result.score
-                        relevant_tools.append(twm)
-
-            return relevant_tools if relevant_tools else await self._get_all_tools()
-
-        except Exception as e:
-            self._log("ERROR", "skills_matching_failed", {"error": str(e)})
-            return await self._get_all_tools()
 
     # =========================================================================
     # PUBLIC API
@@ -2678,6 +2944,14 @@ Now respond to the user in FIRST PERSON:"""
             "jsonrpc_servers": list(self._jsonrpc_servers),
             "planning_mode": self.planning_mode.value,
             "validation_mode": self.validation_mode.value,
+            "never_stuck_mode": self.never_stuck_mode,
+            "loop_guard": {
+                "no_progress_steps": self._no_progress_steps,
+                "max_no_progress_steps": self.max_no_progress_steps,
+                "tool_cooldowns": dict(self._tool_cooldowns),
+                "recent_call_signatures": len(self._recent_call_signatures),
+                "recent_result_signatures": len(self._recent_result_signatures),
+            },
         }
 
     def export_logs(self, format: str = "json") -> str:
