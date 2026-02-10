@@ -1,2 +1,3 @@
-# polymcp/version.py
-__version__ = "0.0.7"
+"""PolyMCP package version."""
+
+__version__ = "1.3.6"

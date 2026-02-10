@@ -5,6 +5,9 @@ Production-ready framework for intelligent LLM tool orchestration.
 
 from .version import __version__
 
+# Skills CLI (skills.sh)
+from .skills_cli import run_skills_cli
+
 # Agents
 from .polyagent import (
     PolyAgent,
@@ -23,12 +26,6 @@ from .polyagent import (
     DeepSeekProvider
 )
 
-# Skills System
-from .polyagent import (
-    MCPSkillGenerator,
-    SkillLoader,
-    SkillMatcher
-)
 
 # Toolkit - Server Creation APIs
 from .polymcp_toolkit import (
@@ -58,11 +55,6 @@ __all__ = [
     'KimiProvider',
     'DeepSeekProvider',
     
-    # Skills System
-    'MCPSkillGenerator',
-    'SkillLoader',
-    'SkillMatcher',
-    
     # Toolkit APIs
     'expose_tools',
     'expose_tools_http',
@@ -70,4 +62,7 @@ __all__ = [
     'expose_tools_stdio',      # NEW
     'expose_tools_wasm',       # NEW
     'InProcessMCPServer',
+
+    # Skills CLI
+    'run_skills_cli',
 ]
