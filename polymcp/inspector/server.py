@@ -3,7 +3,6 @@ PolyMCP Inspector Server - ENHANCED Production Implementation
 FastAPI server with WebSocket for real-time MCP server inspection.
 
 NEW FEATURES:
-- Skills Generator (generate Claude Skills from MCP servers)
 - Resources Support (MCP resources/list + read)
 - Prompts Support (MCP prompts/list + get)
 - Test Suites (save/load/run test scenarios)
@@ -13,14 +12,18 @@ NEW FEATURES:
 import asyncio
 import json
 import logging
+import os
+import re
+import secrets
 import webbrowser
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, asdict
 from collections import defaultdict
+from urllib.parse import quote
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Request
 from fastapi.responses import HTMLResponse, FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -107,6 +110,8 @@ class ServerManager:
         self.stdio_clients: Dict[str, MCPStdioClient] = {}
         self.stdio_adapters: Dict[str, MCPStdioAdapter] = {}
         self.http_tools_cache: Dict[str, List[Dict]] = {}
+        self.http_profiles: Dict[str, Dict[str, Any]] = {}
+        self.http_request_ids: Dict[str, int] = defaultdict(int)
         
         # Metrics tracking
         self.tool_metrics: Dict[str, Dict[str, ToolMetrics]] = defaultdict(dict)
@@ -169,14 +174,7 @@ class ServerManager:
     async def add_http_server(self, server_id: str, name: str, url: str) -> Dict[str, Any]:
         """Add HTTP MCP server."""
         try:
-            import requests
-            
-            # Test connection and discover tools
-            list_url = f"{url}/list_tools"
-            response = requests.get(list_url, timeout=5)
-            response.raise_for_status()
-            
-            tools = response.json().get('tools', [])
+            profile, tools = await self._discover_http_server(server_id, url)
             
             # Store server info
             self.servers[server_id] = ServerInfo(
@@ -191,6 +189,7 @@ class ServerManager:
             
             # Cache tools
             self.http_tools_cache[server_id] = tools
+            self.http_profiles[server_id] = profile
             
             # Initialize metrics for each tool
             for tool in tools:
@@ -233,6 +232,176 @@ class ServerManager:
             })
             
             return {'status': 'error', 'error': error_msg}
+
+    def _get_http_candidates(self, raw_url: str) -> Dict[str, List[str]]:
+        """Build candidate URLs for JSON-RPC MCP and legacy REST MCP."""
+        normalized = (raw_url or "").strip()
+        if not normalized:
+            raise ValueError("Empty server URL")
+
+        normalized = normalized.rstrip("/")
+        rpc_candidates: List[str] = []
+        legacy_candidates: List[str] = []
+
+        def push_unique(values: List[str], value: str):
+            if value and value not in values:
+                values.append(value)
+
+        push_unique(rpc_candidates, normalized)
+        push_unique(legacy_candidates, normalized)
+
+        if normalized.endswith("/mcp"):
+            base = normalized[:-4].rstrip("/")
+            push_unique(legacy_candidates, base)
+        else:
+            push_unique(rpc_candidates, f"{normalized}/mcp")
+
+        if normalized.endswith("/list_tools"):
+            base = normalized[:-11].rstrip("/")
+            push_unique(legacy_candidates, base)
+            push_unique(rpc_candidates, base)
+            push_unique(rpc_candidates, f"{base}/mcp")
+
+        if normalized.endswith("/invoke"):
+            base = normalized[:-7].rstrip("/")
+            push_unique(legacy_candidates, base)
+            push_unique(rpc_candidates, f"{base}/mcp")
+
+        return {"rpc": rpc_candidates, "legacy": legacy_candidates}
+
+    def _next_http_request_id(self, server_id: str) -> int:
+        self.http_request_ids[server_id] += 1
+        return self.http_request_ids[server_id]
+
+    def _http_jsonrpc_call(
+        self,
+        server_id: str,
+        endpoint: str,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+        timeout: float = 15.0,
+    ) -> Dict[str, Any]:
+        """Send a JSON-RPC request to HTTP MCP endpoint and return result object."""
+        import requests
+
+        payload: Dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "id": self._next_http_request_id(server_id),
+            "method": method,
+        }
+        if params is not None:
+            payload["params"] = params
+
+        response = requests.post(
+            endpoint,
+            json=payload,
+            timeout=timeout,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Some servers return batch envelopes or wrapped shapes.
+        if isinstance(data, list):
+            data = data[0] if data else {}
+
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Invalid JSON-RPC response for {method}: {type(data)}")
+
+        if "error" in data and data["error"]:
+            err = data["error"]
+            if isinstance(err, dict):
+                msg = err.get("message", str(err))
+                code = err.get("code")
+                raise RuntimeError(f"{method} failed ({code}): {msg}")
+            raise RuntimeError(f"{method} failed: {err}")
+
+        result = data.get("result", {})
+        if not isinstance(result, dict):
+            return {"value": result}
+        return result
+
+    async def _discover_http_server(self, server_id: str, url: str) -> Any:
+        """
+        Detect best HTTP transport mode:
+        - jsonrpc: Streamable HTTP MCP endpoint (tools/list, tools/call, resources/*, prompts/*)
+        - legacy: REST PolyMCP style (/list_tools, /invoke/{tool}, /tools/{tool})
+        """
+        candidates = self._get_http_candidates(url)
+        discovery_errors: List[str] = []
+
+        # 1) Prefer MCP JSON-RPC endpoint.
+        for endpoint in candidates["rpc"]:
+            try:
+                init_result = await asyncio.to_thread(
+                    self._http_jsonrpc_call,
+                    server_id,
+                    endpoint,
+                    "initialize",
+                    {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {},
+                            "resources": {"subscribe": True},
+                            "prompts": {},
+                        },
+                        "clientInfo": {"name": "polymcp-inspector", "version": "1.3.6"},
+                    },
+                    8.0,
+                )
+
+                # Optional initialized notification
+                try:
+                    await asyncio.to_thread(
+                        self._http_jsonrpc_call,
+                        server_id,
+                        endpoint,
+                        "notifications/initialized",
+                        {},
+                        5.0,
+                    )
+                except Exception:
+                    pass
+
+                tools_result = await asyncio.to_thread(
+                    self._http_jsonrpc_call,
+                    server_id,
+                    endpoint,
+                    "tools/list",
+                    {},
+                    10.0,
+                )
+                tools = tools_result.get("tools", [])
+                if not isinstance(tools, list):
+                    tools = []
+
+                profile = {
+                    "mode": "jsonrpc",
+                    "rpc_endpoint": endpoint,
+                    "base_url": endpoint[:-4].rstrip("/") if endpoint.endswith("/mcp") else endpoint.rstrip("/"),
+                    "initialize": init_result,
+                }
+                return profile, tools
+            except Exception as e:
+                discovery_errors.append(f"JSON-RPC {endpoint}: {e}")
+
+        # 2) Fallback to legacy REST.
+        import requests
+        for base_url in candidates["legacy"]:
+            try:
+                list_url = f"{base_url}/list_tools"
+                response = requests.get(list_url, timeout=6)
+                response.raise_for_status()
+                body = response.json()
+                tools = body.get("tools", []) if isinstance(body, dict) else []
+                if not isinstance(tools, list):
+                    tools = []
+                profile = {"mode": "legacy", "base_url": base_url}
+                return profile, tools
+            except Exception as e:
+                discovery_errors.append(f"Legacy {base_url}: {e}")
+
+        raise RuntimeError("; ".join(discovery_errors[-5:]) or "Unknown HTTP discovery failure")
     
     async def add_stdio_server(
         self,
@@ -324,6 +493,10 @@ class ServerManager:
         # Remove from caches
         if server_id in self.http_tools_cache:
             del self.http_tools_cache[server_id]
+        if server_id in self.http_profiles:
+            del self.http_profiles[server_id]
+        if server_id in self.http_request_ids:
+            del self.http_request_ids[server_id]
         
         if server_id in self.tool_metrics:
             del self.tool_metrics[server_id]
@@ -342,6 +515,29 @@ class ServerManager:
         server = self.servers[server_id]
         
         if server.type == 'http':
+            profile = self.http_profiles.get(server_id, {"mode": "legacy", "base_url": server.url})
+            if profile.get("mode") == "jsonrpc":
+                tools: List[Dict[str, Any]] = []
+                cursor: Optional[str] = None
+                for _ in range(50):
+                    params = {"cursor": cursor} if cursor else {}
+                    result = await asyncio.to_thread(
+                        self._http_jsonrpc_call,
+                        server_id,
+                        profile["rpc_endpoint"],
+                        "tools/list",
+                        params,
+                        15.0,
+                    )
+                    page_tools = result.get("tools", [])
+                    if isinstance(page_tools, list):
+                        tools.extend(page_tools)
+                    next_cursor = result.get("nextCursor")
+                    if not next_cursor:
+                        break
+                    cursor = str(next_cursor)
+                self.http_tools_cache[server_id] = tools
+                return tools
             return self.http_tools_cache.get(server_id, [])
         else:  # stdio
             if server_id in self.stdio_adapters:
@@ -363,15 +559,57 @@ class ServerManager:
         
         try:
             if server.type == 'http':
-                import requests
-                invoke_url = f"{server.url}/invoke/{tool_name}"
-                response = requests.post(
-                    invoke_url,
-                    json=parameters,
-                    timeout=30
-                )
-                response.raise_for_status()
-                result = response.json()
+                profile = self.http_profiles.get(server_id, {"mode": "legacy", "base_url": server.url})
+                if profile.get("mode") == "jsonrpc":
+                    result = await asyncio.to_thread(
+                        self._http_jsonrpc_call,
+                        server_id,
+                        profile["rpc_endpoint"],
+                        "tools/call",
+                        {"name": tool_name, "arguments": parameters},
+                        45.0,
+                    )
+                    if isinstance(result, dict) and result.get("isError") is True:
+                        text = "Tool returned isError=true"
+                        content = result.get("content")
+                        if isinstance(content, list):
+                            for item in content:
+                                if isinstance(item, dict) and item.get("text"):
+                                    text = str(item["text"])
+                                    break
+                        raise RuntimeError(text)
+                else:
+                    import requests
+                    base_url = profile.get("base_url", server.url).rstrip("/")
+
+                    errors: List[str] = []
+                    legacy_calls = [
+                        ("POST", f"{base_url}/tools/{tool_name}", parameters),
+                        ("POST", f"{base_url}/invoke/{tool_name}", parameters),
+                        ("POST", f"{base_url}/invoke", {"tool": tool_name, "parameters": parameters}),
+                    ]
+
+                    result = None
+                    for method, endpoint, payload in legacy_calls:
+                        try:
+                            response = requests.request(
+                                method,
+                                endpoint,
+                                json=payload,
+                                timeout=30,
+                                headers={"Accept": "application/json"},
+                            )
+                            response.raise_for_status()
+                            ctype = response.headers.get("content-type", "")
+                            if "application/json" in ctype:
+                                result = response.json()
+                            else:
+                                result = {"status": "success", "result": response.text}
+                            break
+                        except Exception as e:
+                            errors.append(f"{endpoint}: {e}")
+                    if result is None:
+                        raise RuntimeError("; ".join(errors[-3:]))
             
             else:  # stdio
                 adapter = self.stdio_adapters[server_id]
@@ -438,19 +676,37 @@ class ServerManager:
         
         try:
             if server.type == 'http':
+                profile = self.http_profiles.get(server_id, {"mode": "legacy", "base_url": server.url})
+                if profile.get("mode") == "jsonrpc":
+                    resources: List[Dict[str, Any]] = []
+                    cursor: Optional[str] = None
+                    for _ in range(50):
+                        params = {"cursor": cursor} if cursor else {}
+                        result = await asyncio.to_thread(
+                            self._http_jsonrpc_call,
+                            server_id,
+                            profile["rpc_endpoint"],
+                            "resources/list",
+                            params,
+                            15.0,
+                        )
+                        page = result.get("resources", [])
+                        if isinstance(page, list):
+                            resources.extend(page)
+                        next_cursor = result.get("nextCursor")
+                        if not next_cursor:
+                            break
+                        cursor = str(next_cursor)
+                    return resources
+                # Legacy fallback for MCP Apps style endpoints
                 import requests
-                response = requests.post(
-                    server.url,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "resources/list",
-                        "id": 1
-                    },
-                    timeout=10
-                )
+                base_url = profile.get("base_url", server.url).rstrip("/")
+                response = requests.get(f"{base_url}/list_resources", timeout=10)
                 response.raise_for_status()
-                result = response.json().get('result', {})
-                return result.get('resources', [])
+                payload = response.json()
+                if isinstance(payload, dict):
+                    return payload.get("resources", [])
+                return []
             
             else:  # stdio
                 client = self.stdio_clients[server_id]
@@ -471,19 +727,62 @@ class ServerManager:
         
         try:
             if server.type == 'http':
-                import requests
-                response = requests.post(
-                    server.url,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "resources/read",
-                        "params": {"uri": uri},
-                        "id": 1
-                    },
-                    timeout=10
-                )
-                response.raise_for_status()
-                result = response.json().get('result', {})
+                profile = self.http_profiles.get(server_id, {"mode": "legacy", "base_url": server.url})
+                if profile.get("mode") == "jsonrpc":
+                    result = await asyncio.to_thread(
+                        self._http_jsonrpc_call,
+                        server_id,
+                        profile["rpc_endpoint"],
+                        "resources/read",
+                        {"uri": uri},
+                        20.0,
+                    )
+                else:
+                    import requests
+                    base_url = profile.get("base_url", server.url).rstrip("/")
+                    encoded_uri = quote(uri, safe="")
+                    errors: List[str] = []
+                    result = {}
+
+                    try:
+                        response = requests.get(f"{base_url}/resources/{encoded_uri}", timeout=15)
+                        response.raise_for_status()
+                        content_type = response.headers.get("content-type", "text/plain")
+                        if "application/json" in content_type:
+                            payload = response.json()
+                            if isinstance(payload, dict) and "contents" in payload:
+                                result = payload
+                            else:
+                                result = {
+                                    "contents": [{
+                                        "uri": uri,
+                                        "mimeType": payload.get("mimeType", content_type) if isinstance(payload, dict) else "application/json",
+                                        "text": json.dumps(payload, ensure_ascii=False, indent=2),
+                                    }]
+                                }
+                        else:
+                            result = {
+                                "contents": [{
+                                    "uri": uri,
+                                    "mimeType": content_type,
+                                    "text": response.text,
+                                }]
+                            }
+                    except Exception as e:
+                        errors.append(f"GET /resources/{{uri}}: {e}")
+                        response = requests.post(
+                            f"{base_url}/resources/read",
+                            json={"uri": uri},
+                            timeout=15,
+                            headers={"Accept": "application/json"},
+                        )
+                        response.raise_for_status()
+                        payload = response.json()
+                        if isinstance(payload, dict):
+                            result = payload if "contents" in payload else {"contents": [payload]}
+                        else:
+                            errors.append("Invalid /resources/read payload")
+                            raise RuntimeError("; ".join(errors))
             
             else:  # stdio
                 client = self.stdio_clients[server_id]
@@ -541,19 +840,29 @@ class ServerManager:
         
         try:
             if server.type == 'http':
-                import requests
-                response = requests.post(
-                    server.url,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "prompts/list",
-                        "id": 1
-                    },
-                    timeout=10
-                )
-                response.raise_for_status()
-                result = response.json().get('result', {})
-                return result.get('prompts', [])
+                profile = self.http_profiles.get(server_id, {"mode": "legacy", "base_url": server.url})
+                if profile.get("mode") == "jsonrpc":
+                    prompts: List[Dict[str, Any]] = []
+                    cursor: Optional[str] = None
+                    for _ in range(50):
+                        params = {"cursor": cursor} if cursor else {}
+                        result = await asyncio.to_thread(
+                            self._http_jsonrpc_call,
+                            server_id,
+                            profile["rpc_endpoint"],
+                            "prompts/list",
+                            params,
+                            15.0,
+                        )
+                        page = result.get("prompts", [])
+                        if isinstance(page, list):
+                            prompts.extend(page)
+                        next_cursor = result.get("nextCursor")
+                        if not next_cursor:
+                            break
+                        cursor = str(next_cursor)
+                    return prompts
+                return []
             
             else:  # stdio
                 client = self.stdio_clients[server_id]
@@ -579,22 +888,17 @@ class ServerManager:
         
         try:
             if server.type == 'http':
-                import requests
-                response = requests.post(
-                    server.url,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "prompts/get",
-                        "params": {
-                            "name": prompt_name,
-                            "arguments": arguments
-                        },
-                        "id": 1
-                    },
-                    timeout=10
+                profile = self.http_profiles.get(server_id, {"mode": "legacy", "base_url": server.url})
+                if profile.get("mode") != "jsonrpc":
+                    raise RuntimeError("Prompt APIs are available only on JSON-RPC MCP endpoints")
+                result = await asyncio.to_thread(
+                    self._http_jsonrpc_call,
+                    server_id,
+                    profile["rpc_endpoint"],
+                    "prompts/get",
+                    {"name": prompt_name, "arguments": arguments},
+                    20.0,
                 )
-                response.raise_for_status()
-                result = response.json().get('result', {})
             
             else:  # stdio
                 client = self.stdio_clients[server_id]
@@ -639,117 +943,505 @@ class ServerManager:
                 'error': error_msg,
                 'duration': duration
             }
-    
-    # NEW: Skills Generator
-    async def generate_skill(self, server_id: str) -> Dict[str, Any]:
-        """Generate Claude Skill from MCP server."""
+
+    async def proxy_mcp_request(
+        self,
+        server_id: str,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Send an arbitrary MCP request through the selected transport."""
         if server_id not in self.servers:
             raise ValueError(f"Server {server_id} not found")
-        
+        if not method:
+            raise ValueError("method is required")
+
         server = self.servers[server_id]
-        tools = await self.get_tools(server_id)
-        
+        start_time = datetime.now()
+
         try:
-            # Try to import skill generator
-            try:
-                from ..skill_generator import MCPSkillGenerator
-                generator = MCPSkillGenerator()
-                has_generator = True
-            except ImportError:
-                has_generator = False
-            
-            if has_generator:
-                # Use production skill generator
-                if server.type == 'http':
-                    skill_content = await asyncio.to_thread(
-                        generator.generate_from_url,
-                        server.url,
-                        server_name=server.name
-                    )
-                else:
-                    # For stdio, generate from tools list
-                    skill_content = self._generate_skill_from_tools(server, tools)
+            if server.type == 'http':
+                profile = self.http_profiles.get(server_id, {"mode": "legacy", "base_url": server.url})
+                if profile.get("mode") != "jsonrpc":
+                    raise RuntimeError("Generic MCP request requires a JSON-RPC MCP endpoint")
+                result = await asyncio.to_thread(
+                    self._http_jsonrpc_call,
+                    server_id,
+                    profile["rpc_endpoint"],
+                    method,
+                    params or {},
+                    30.0,
+                )
             else:
-                # Fallback: simple skill generation
-                skill_content = self._generate_skill_from_tools(server, tools)
-            
-            filename = f"{server.name.lower().replace(' ', '_')}_skill.md"
-            
-            return {
-                'status': 'success',
-                'skill': skill_content,
-                'filename': filename,
-                'server_name': server.name
-            }
-        
+                client = self.stdio_clients[server_id]
+                response = await client._send_request(method, params or {})
+                if "error" in response and response["error"]:
+                    raise RuntimeError(str(response["error"]))
+                result = response.get("result", {})
+
+            duration = (datetime.now() - start_time).total_seconds() * 1000
+            self._log_activity(
+                server_id=server_id,
+                method=f"mcp:{method}",
+                tool_name=None,
+                status=200,
+                duration=duration
+            )
+            return {"status": "success", "result": result, "duration": duration}
         except Exception as e:
-            logger.error(f"Failed to generate skill: {e}")
+            duration = (datetime.now() - start_time).total_seconds() * 1000
+            self._log_activity(
+                server_id=server_id,
+                method=f"mcp:{method}",
+                tool_name=None,
+                status=500,
+                duration=duration,
+                error=str(e),
+            )
+            return {"status": "error", "error": str(e), "duration": duration}
+
+    # LLM integration (Ollama + OpenAI + Anthropic)
+    def _ollama_base_url(self) -> str:
+        return os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+
+    def _openai_base_url(self) -> str:
+        return os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+
+    def _anthropic_base_url(self) -> str:
+        return os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1").rstrip("/")
+
+    def list_ollama_models(self) -> Dict[str, Any]:
+        """List locally available Ollama models."""
+        import requests
+
+        base_url = self._ollama_base_url()
+        try:
+            response = requests.get(f"{base_url}/api/tags", timeout=5)
+            response.raise_for_status()
+            payload = response.json()
+            models = payload.get("models", []) if isinstance(payload, dict) else []
+            names: List[str] = []
+            seen: set[str] = set()
+            for item in models:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name") or "").strip()
+                if not name or name in seen:
+                    continue
+                names.append(name)
+                seen.add(name)
             return {
-                'status': 'error',
-                'error': str(e)
+                "status": "success",
+                "provider": "ollama",
+                "base_url": base_url,
+                "source": "ollama_api_tags",
+                "fetched_at": datetime.now().isoformat(),
+                "models": names,
             }
+        except Exception as e:
+            return {"status": "error", "provider": "ollama", "base_url": base_url, "error": str(e), "models": []}
+
+    def list_openai_models(self, api_key_override: Optional[str] = None) -> Dict[str, Any]:
+        import requests
+        api_key = (api_key_override or os.getenv("OPENAI_API_KEY", "")).strip()
+        if not api_key:
+            return {
+                "status": "error",
+                "provider": "openai",
+                "error": "Missing OPENAI_API_KEY",
+                "models": [],
+            }
+        try:
+            response = requests.get(
+                f"{self._openai_base_url()}/models",
+                timeout=10,
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+            data = payload.get("data", []) if isinstance(payload, dict) else []
+            names = sorted([m.get("id") for m in data if isinstance(m, dict) and m.get("id")])
+            return {"status": "success", "provider": "openai", "models": names}
+        except Exception as e:
+            return {"status": "error", "provider": "openai", "error": str(e), "models": []}
+
+    def list_anthropic_models(self, api_key_override: Optional[str] = None) -> Dict[str, Any]:
+        api_key = (api_key_override or os.getenv("ANTHROPIC_API_KEY", "")).strip()
+        if not api_key:
+            return {
+                "status": "error",
+                "provider": "anthropic",
+                "error": "Missing ANTHROPIC_API_KEY",
+                "models": [],
+            }
+        # Anthropic does not provide a public models list endpoint analogous to OpenAI.
+        return {
+            "status": "success",
+            "provider": "anthropic",
+            "models": [
+                "claude-3-5-sonnet-latest",
+                "claude-3-7-sonnet-latest",
+                "claude-3-opus-latest",
+            ],
+            "note": "Configured defaults. Override with your own model id if needed.",
+        }
+
+    def _extract_json_object(self, text: str) -> Optional[Dict[str, Any]]:
+        """Extract first JSON object from text."""
+        if not text:
+            return None
+        raw = text.strip()
+
+        # Remove markdown fences if present.
+        if "```" in raw:
+            raw = raw.replace("```json", "```")
+            chunks = [c.strip() for c in raw.split("```") if c.strip()]
+            for chunk in chunks:
+                try:
+                    obj = json.loads(chunk)
+                    if isinstance(obj, dict):
+                        return obj
+                except Exception:
+                    continue
+
+        try:
+            obj = json.loads(raw)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if not match:
+            return None
+        try:
+            obj = json.loads(match.group(0))
+            return obj if isinstance(obj, dict) else None
+        except Exception:
+            return None
+
+    def _call_ollama_chat(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        timeout: float = 90.0,
+    ) -> str:
+        """Call Ollama /api/chat and return assistant text content."""
+        import requests
+
+        response = requests.post(
+            f"{self._ollama_base_url()}/api/chat",
+            json={
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.1},
+            },
+            timeout=timeout,
+            headers={"Content-Type": "application/json"},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        message = payload.get("message", {}) if isinstance(payload, dict) else {}
+        content = message.get("content", "") if isinstance(message, dict) else ""
+        return str(content or "")
+
+    def _call_openai_chat(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        timeout: float = 90.0,
+        api_key_override: Optional[str] = None,
+    ) -> str:
+        import requests
+        api_key = (api_key_override or os.getenv("OPENAI_API_KEY", "")).strip()
+        if not api_key:
+            raise RuntimeError("Missing OPENAI_API_KEY")
+        response = requests.post(
+            f"{self._openai_base_url()}/chat/completions",
+            json={"model": model, "messages": messages, "temperature": 0.1},
+            timeout=timeout,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        choices = payload.get("choices", []) if isinstance(payload, dict) else []
+        if not choices:
+            return ""
+        msg = choices[0].get("message", {})
+        return str(msg.get("content", "") or "")
+
+    def _call_anthropic_chat(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        timeout: float = 90.0,
+        api_key_override: Optional[str] = None,
+    ) -> str:
+        import requests
+        api_key = (api_key_override or os.getenv("ANTHROPIC_API_KEY", "")).strip()
+        if not api_key:
+            raise RuntimeError("Missing ANTHROPIC_API_KEY")
+
+        system_parts = [m.get("content", "") for m in messages if m.get("role") == "system"]
+        non_system = [m for m in messages if m.get("role") != "system"]
+        response = requests.post(
+            f"{self._anthropic_base_url()}/messages",
+            json={
+                "model": model,
+                "max_tokens": 1000,
+                "temperature": 0.1,
+                "system": "\n\n".join(system_parts),
+                "messages": non_system,
+            },
+            timeout=timeout,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        content = payload.get("content", []) if isinstance(payload, dict) else []
+        chunks: List[str] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                chunks.append(str(part.get("text", "")))
+        return "".join(chunks).strip()
+
+    def _call_llm_chat(
+        self,
+        provider: str,
+        model: str,
+        messages: List[Dict[str, str]],
+        timeout: float = 90.0,
+        api_key_override: Optional[str] = None,
+    ) -> str:
+        provider = provider.lower().strip()
+        if provider == "ollama":
+            return self._call_ollama_chat(model, messages, timeout)
+        if provider == "openai":
+            return self._call_openai_chat(model, messages, timeout, api_key_override=api_key_override)
+        if provider == "anthropic":
+            return self._call_anthropic_chat(model, messages, timeout, api_key_override=api_key_override)
+        raise RuntimeError(f"Unsupported provider: {provider}")
+
+    def _should_use_tools(
+        self,
+        provider: str,
+        model: str,
+        user_prompt: str,
+        tool_catalog_json: str,
+        api_key_override: Optional[str] = None,
+    ) -> bool:
+        router_system = (
+            "You are a router that decides if tools are needed. "
+            "Reply ONLY with YES or NO. No other words."
+        )
+        router_user = (
+            f"User request:\n{user_prompt}\n\n"
+            f"Available tools:\n{tool_catalog_json}\n\n"
+            "Do you need to call tools to answer?"
+        )
+        raw = self._call_llm_chat(
+            provider,
+            model,
+            [{"role": "system", "content": router_system}, {"role": "user", "content": router_user}],
+            timeout=60.0,
+            api_key_override=api_key_override,
+        )
+        verdict = str(raw or "").strip().lower()
+        return verdict.startswith("y")
+
+    async def llm_chat_with_tools(
+        self,
+        provider: str,
+        server_id: str,
+        model: str,
+        user_prompt: str,
+        max_steps: int = 6,
+        auto_tools: bool = True,
+        api_key_override: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run provider tool-use loop against selected MCP server."""
+        if server_id not in self.servers:
+            raise ValueError(f"Server {server_id} not found")
+        provider = provider.lower().strip()
+        if not model:
+            raise ValueError("model is required")
+        if not user_prompt or not user_prompt.strip():
+            raise ValueError("prompt is required")
+
+        tools = await self.get_tools(server_id)
+        compact_tools = [
+            {
+                "name": t.get("name"),
+                "description": t.get("description", ""),
+                "input_schema": t.get("input_schema") or t.get("inputSchema") or {},
+            }
+            for t in tools
+            if t.get("name")
+        ]
+        available_tool_names = {t["name"] for t in compact_tools}
+        tool_catalog = json.dumps(compact_tools, ensure_ascii=False, indent=2)
+
+        planner_system = (
+            "You are a tool-using assistant for an MCP app. "
+            "You MUST reply ONLY with JSON object and nothing else.\n"
+            "Allowed JSON shapes:\n"
+            "1) {\"type\":\"tool_call\",\"tool\":\"<name>\",\"arguments\":{...},\"reasoning\":\"...\"}\n"
+            "2) {\"type\":\"final\",\"answer\":\"...\"}\n"
+            "Use one tool call at a time. After receiving tool result, continue or finalize."
+        )
+
+        if auto_tools:
+            try:
+                use_tools = await asyncio.to_thread(
+                    self._should_use_tools, provider, model, user_prompt, tool_catalog, api_key_override
+                )
+            except Exception:
+                use_tools = True
+            if not use_tools:
+                try:
+                    answer = await asyncio.to_thread(
+                        self._call_llm_chat,
+                        provider,
+                        model,
+                        [{"role": "system", "content": "You are a helpful assistant."},
+                         {"role": "user", "content": user_prompt}],
+                        90.0,
+                        api_key_override,
+                    )
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "provider": provider,
+                        "model": model,
+                        "error": f"{provider} call failed: {e}",
+                        "steps": [],
+                        "used_tools": False,
+                    }
+                return {
+                    "status": "success",
+                    "provider": provider,
+                    "model": model,
+                    "final_answer": str(answer).strip(),
+                    "steps": [],
+                    "used_tools": False,
+                }
+
+        messages: List[Dict[str, str]] = [
+            {"role": "system", "content": planner_system},
+            {
+                "role": "user",
+                "content": (
+                    f"User request:\n{user_prompt}\n\n"
+                    f"Available tools:\n{tool_catalog}\n\n"
+                    "Choose the next action now."
+                ),
+            },
+        ]
+
+        steps: List[Dict[str, Any]] = []
+
+        for step_index in range(1, max(1, int(max_steps)) + 1):
+            started_at = datetime.now()
+            try:
+                raw = await asyncio.to_thread(self._call_llm_chat, provider, model, messages, 120.0, api_key_override)
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "provider": provider,
+                    "model": model,
+                    "error": f"{provider} call failed: {e}",
+                    "steps": steps,
+                }
+
+            decision = self._extract_json_object(raw)
+            if not decision:
+                return {
+                    "status": "error",
+                    "provider": provider,
+                    "model": model,
+                    "error": "Model did not return valid JSON action",
+                    "raw": raw,
+                    "steps": steps,
+                }
+
+            decision_type = str(decision.get("type", "")).strip().lower()
+
+            if decision_type == "final":
+                answer = str(decision.get("answer", "")).strip() or "Done."
+                return {
+                    "status": "success",
+                    "provider": provider,
+                    "model": model,
+                    "final_answer": answer,
+                    "steps": steps,
+                    "used_tools": True,
+                }
+
+            if decision_type != "tool_call":
+                return {
+                    "status": "error",
+                    "provider": provider,
+                    "model": model,
+                    "error": f"Unsupported action type: {decision_type}",
+                    "decision": decision,
+                    "steps": steps,
+                }
+
+            tool_name = str(decision.get("tool", "")).strip()
+            arguments = decision.get("arguments", {})
+            if not isinstance(arguments, dict):
+                arguments = {}
+
+            if tool_name not in available_tool_names:
+                return {
+                    "status": "error",
+                    "provider": provider,
+                    "model": model,
+                    "error": f"Model requested unknown tool: {tool_name}",
+                    "decision": decision,
+                    "steps": steps,
+                }
+
+            tool_result = await self.execute_tool(server_id, tool_name, arguments)
+            duration = (datetime.now() - started_at).total_seconds() * 1000
+
+            steps.append(
+                {
+                    "step": step_index,
+                    "type": "tool_call",
+                    "tool": tool_name,
+                    "arguments": arguments,
+                    "result": tool_result,
+                    "duration": duration,
+                }
+            )
+
+            messages.append({"role": "assistant", "content": json.dumps(decision, ensure_ascii=False)})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Tool result for `{tool_name}`:\n"
+                        f"{json.dumps(tool_result, ensure_ascii=False)}\n\n"
+                        "Now choose next action (tool_call or final)."
+                    ),
+                }
+            )
+
+        return {
+            "status": "success",
+            "provider": provider,
+            "model": model,
+            "final_answer": "Max steps reached. Partial execution completed.",
+            "steps": steps,
+            "used_tools": True,
+        }
     
-    def _generate_skill_from_tools(self, server: ServerInfo, tools: List[Dict]) -> str:
-        """Generate skill content from tools list."""
-        skill_md = f"""# {server.name} - MCP Tools Skill
-
-## Overview
-Auto-generated skill for {server.name} MCP server.
-
-**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-## Server Information
-- **Type:** {server.type}
-- **URL:** {server.url}
-- **Tools:** {len(tools)}
-- **Status:** {server.status}
-
-## Available Tools
-
-"""
-        
-        # Add each tool
-        for tool in tools:
-            tool_name = tool.get('name', 'unknown')
-            tool_desc = tool.get('description', 'No description')
-            input_schema = tool.get('inputSchema') or tool.get('input_schema', {})
-            
-            skill_md += f"""### {tool_name}
-
-**Description:** {tool_desc}
-
-**Input Schema:**
-```json
-{json.dumps(input_schema, indent=2)}
-```
-
----
-
-"""
-        
-        # Add usage section
-        skill_md += f"""## Usage Examples
-
-When Claude needs to use these tools:
-
-```
-Available tools: {', '.join(t.get('name', '') for t in tools)}
-```
-
-## Best Practices
-
-1. Always validate input parameters against the schema
-2. Check tool responses for errors
-3. Use appropriate error handling
-4. Consider rate limits and timeouts
-
----
-
-*Generated by PolyMCP Inspector*
-*{datetime.now().isoformat()}*
-"""
-        
-        return skill_md
     
     # NEW: Test Suites
     def create_test_suite(
@@ -1160,23 +1852,111 @@ class InspectorServer:
     ENHANCED with all 5 new features.
     """
     
-    def __init__(self, host: str = "127.0.0.1", port: int = 6274, verbose: bool = False):
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 6274,
+        verbose: bool = False,
+        secure_mode: bool = False,
+        api_key: Optional[str] = None,
+        allowed_origins: Optional[List[str]] = None,
+        rate_limit_per_minute: int = 120,
+        rate_limit_window_seconds: int = 60,
+    ):
         self.host = host
         self.port = port
         self.verbose = verbose
+        self.secure_mode = secure_mode
+        self.api_key = api_key
+        self.rate_limit_per_minute = max(10, int(rate_limit_per_minute))
+        self.rate_limit_window_seconds = max(10, int(rate_limit_window_seconds))
+        self._rate_limit_buckets: Dict[str, List[float]] = defaultdict(list)
         self.app = FastAPI(title="PolyMCP Inspector")
         self.manager = ServerManager(verbose=verbose)
-        
+
+        if allowed_origins:
+            cors_origins = allowed_origins
+        else:
+            cors_origins = [
+                f"http://{host}:{port}",
+                f"https://{host}:{port}",
+                f"http://localhost:{port}",
+                f"http://127.0.0.1:{port}",
+            ]
+
         # CORS
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=cors_origins,
             allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Authorization", "X-Inspector-API-Key"],
         )
-        
+
+        @self.app.middleware("http")
+        async def security_middleware(request: Request, call_next):
+            if request.url.path.startswith("/api/"):
+                now_ts = datetime.now().timestamp()
+                ip = (request.client.host if request.client else "unknown")
+                bucket = self._rate_limit_buckets[ip]
+                cutoff = now_ts - self.rate_limit_window_seconds
+                bucket[:] = [ts for ts in bucket if ts >= cutoff]
+                if len(bucket) >= self.rate_limit_per_minute:
+                    return PlainTextResponse("Rate limit exceeded", status_code=429)
+                bucket.append(now_ts)
+
+                if self.secure_mode and not self._is_http_request_authorized(request):
+                    return PlainTextResponse("Unauthorized", status_code=401)
+
+            response = await call_next(request)
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            # Allow Tauri WebView iframe embedding
+            origin = (request.headers.get("origin") or "").lower()
+            referer = (request.headers.get("referer") or "").lower()
+            is_tauri = (
+                origin.startswith("tauri://")
+                or referer.startswith("tauri://")
+                or origin.startswith("http://tauri.localhost")
+                or origin.startswith("https://tauri.localhost")
+                or referer.startswith("http://tauri.localhost")
+                or referer.startswith("https://tauri.localhost")
+            )
+            if not is_tauri:
+                response.headers["X-Frame-Options"] = "SAMEORIGIN"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            if self.secure_mode:
+                response.headers["Cache-Control"] = "no-store"
+            return response
+
         self._setup_routes()
+
+    def _is_http_request_authorized(self, request: Request) -> bool:
+        if not self.secure_mode:
+            return True
+        if not self.api_key:
+            return False
+        header_key = request.headers.get("x-inspector-api-key", "").strip()
+        auth = request.headers.get("authorization", "").strip()
+        bearer_key = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        return (
+            secrets.compare_digest(header_key or "", self.api_key)
+            or secrets.compare_digest(bearer_key or "", self.api_key)
+        )
+
+    def _is_websocket_authorized(self, websocket: WebSocket) -> bool:
+        if not self.secure_mode:
+            return True
+        if not self.api_key:
+            return False
+        query_key = websocket.query_params.get("api_key", "").strip()
+        header_key = websocket.headers.get("x-inspector-api-key", "").strip()
+        auth = websocket.headers.get("authorization", "").strip()
+        bearer_key = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        return (
+            secrets.compare_digest(query_key or "", self.api_key)
+            or secrets.compare_digest(header_key or "", self.api_key)
+            or secrets.compare_digest(bearer_key or "", self.api_key)
+        )
     
     def _setup_routes(self):
         """Setup API routes."""
@@ -1189,10 +1969,21 @@ class InspectorServer:
                 return FileResponse(html_path)
             else:
                 return HTMLResponse("<h1>PolyMCP Inspector</h1><p>UI file not found</p>")
+
+        @self.app.get("/icon.png")
+        async def serve_icon():
+            """Serve inspector icon used by chat/avatar UI."""
+            icon_path = Path(__file__).parent / "static" / "icon.png"
+            if icon_path.exists():
+                return FileResponse(icon_path)
+            raise HTTPException(404, "Icon file not found")
         
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
             """WebSocket endpoint for real-time updates."""
+            if not self._is_websocket_authorized(websocket):
+                await websocket.close(code=1008)
+                return
             await websocket.accept()
             await self.manager.register_websocket(websocket)
             
@@ -1294,12 +2085,101 @@ class InspectorServer:
         ):
             """Get rendered prompt."""
             return await self.manager.get_prompt(server_id, prompt_name, arguments)
-        
-        # NEW: Skills Generator
-        @self.app.post("/api/servers/{server_id}/generate-skill")
-        async def generate_skill(server_id: str):
-            """Generate Claude Skill from server."""
-            return await self.manager.generate_skill(server_id)
+
+        @self.app.post("/api/servers/{server_id}/mcp/request")
+        async def mcp_request(
+            server_id: str,
+            method: str = Body(...),
+            params: Dict[str, Any] = Body(default_factory=dict),
+        ):
+            """Proxy arbitrary MCP method request (advanced inspector use)."""
+            return await self.manager.proxy_mcp_request(server_id, method, params)
+
+        # LLM integration
+        @self.app.get("/api/llm/providers")
+        async def list_llm_providers(request: Request):
+            """List configured LLM providers and availability."""
+            ollama = self.manager.list_ollama_models()
+            openai_key = request.headers.get("X-OpenAI-API-Key", "").strip() or None
+            anthropic_key = request.headers.get("X-Anthropic-API-Key", "").strip() or None
+            openai = self.manager.list_openai_models(openai_key)
+            anthropic = self.manager.list_anthropic_models(anthropic_key)
+            return {
+                "providers": [
+                    {
+                        "id": "ollama",
+                        "name": "Ollama",
+                        "status": ollama.get("status"),
+                        "base_url": ollama.get("base_url"),
+                        "models_count": len(ollama.get("models", [])),
+                        "error": ollama.get("error"),
+                    },
+                    {
+                        "id": "openai",
+                        "name": "OpenAI",
+                        "status": openai.get("status"),
+                        "models_count": len(openai.get("models", [])),
+                        "error": openai.get("error"),
+                    },
+                    {
+                        "id": "anthropic",
+                        "name": "Anthropic",
+                        "status": anthropic.get("status"),
+                        "models_count": len(anthropic.get("models", [])),
+                        "error": anthropic.get("error"),
+                    }
+                ]
+            }
+
+        @self.app.get("/api/llm/ollama/models")
+        async def list_ollama_models():
+            """List local Ollama models."""
+            return self.manager.list_ollama_models()
+
+        @self.app.get("/api/llm/openai/models")
+        async def list_openai_models(request: Request):
+            """List OpenAI models."""
+            openai_key = request.headers.get("X-OpenAI-API-Key", "").strip() or None
+            return self.manager.list_openai_models(openai_key)
+
+        @self.app.get("/api/llm/anthropic/models")
+        async def list_anthropic_models(request: Request):
+            """List Anthropic models."""
+            anthropic_key = request.headers.get("X-Anthropic-API-Key", "").strip() or None
+            return self.manager.list_anthropic_models(anthropic_key)
+
+        @self.app.post("/api/servers/{server_id}/llm/chat")
+        async def llm_chat(
+            request: Request,
+            server_id: str,
+            provider: str = Body("ollama"),
+            model: str = Body(...),
+            prompt: str = Body(...),
+            max_steps: int = Body(6),
+            auto_tools: bool = Body(True),
+            api_key: Optional[str] = Body(None),
+        ):
+            """Run LLM + MCP tool loop against selected server."""
+            provider_id = provider.lower().strip()
+            resolved_api_key = (api_key or "").strip() or None
+            if provider_id == "openai":
+                header_key = request.headers.get("X-OpenAI-API-Key", "").strip()
+                if header_key:
+                    resolved_api_key = header_key
+            elif provider_id == "anthropic":
+                header_key = request.headers.get("X-Anthropic-API-Key", "").strip()
+                if header_key:
+                    resolved_api_key = header_key
+
+            return await self.manager.llm_chat_with_tools(
+                provider=provider,
+                server_id=server_id,
+                model=model,
+                user_prompt=prompt,
+                max_steps=max_steps,
+                auto_tools=auto_tools,
+                api_key_override=resolved_api_key,
+            )
         
         # NEW: Test Suites
         @self.app.get("/api/test-suites")
@@ -1390,7 +2270,12 @@ async def run_inspector(
     port: int = 6274,
     verbose: bool = False,
     open_browser: bool = True,
-    servers: Optional[List[Dict[str, Any]]] = None
+    servers: Optional[List[Dict[str, Any]]] = None,
+    secure_mode: bool = False,
+    api_key: Optional[str] = None,
+    allowed_origins: Optional[List[str]] = None,
+    rate_limit_per_minute: int = 120,
+    rate_limit_window_seconds: int = 60,
 ):
     """
     Run the PolyMCP Inspector server.
@@ -1407,7 +2292,21 @@ async def run_inspector(
     else:
         logging.basicConfig(level=logging.INFO)
     
-    inspector = InspectorServer(host=host, port=port, verbose=verbose)
+    if secure_mode and not api_key:
+        api_key = secrets.token_urlsafe(24)
+        logger.warning("Inspector secure mode enabled with auto-generated API key")
+        logger.warning("Use this key to access API/UI: %s", api_key)
+
+    inspector = InspectorServer(
+        host=host,
+        port=port,
+        verbose=verbose,
+        secure_mode=secure_mode,
+        api_key=api_key,
+        allowed_origins=allowed_origins,
+        rate_limit_per_minute=rate_limit_per_minute,
+        rate_limit_window_seconds=rate_limit_window_seconds,
+    )
     
     # Add initial servers
     if servers:
@@ -1433,14 +2332,20 @@ async def run_inspector(
     # Open browser
     if open_browser:
         await asyncio.sleep(1)
-        webbrowser.open(f"http://{host}:{port}")
+        url = f"http://{host}:{port}"
+        if secure_mode and api_key:
+            url = f"{url}/?api_key={api_key}"
+        webbrowser.open(url)
     
     # Run server
+    logger.warning("Inspector server running on http://%s:%s", host, port)
     config = uvicorn.Config(
         inspector.app,
         host=host,
         port=port,
-        log_level="info" if verbose else "warning"
+        log_level="info" if verbose else "warning",
+        log_config=None,
+        access_log=False,
     )
     server = uvicorn.Server(config)
     
