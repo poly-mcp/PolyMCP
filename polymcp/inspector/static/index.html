@@ -122,6 +122,18 @@
       display: block;
       object-fit: contain;
     }
+    /* Fallback when icon.png fails to load */
+    .assistant-avatar-img.icon-failed {
+      display: none;
+    }
+    .assistant-avatar-fallback {
+      display: none;
+      width: 16px;
+      height: 16px;
+    }
+    .assistant-avatar-img.icon-failed + .assistant-avatar-fallback {
+      display: block;
+    }
 
     .tool-response { margin-top: 12px; padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; }
     .tool-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); }
@@ -245,7 +257,24 @@
     </div>
   </div>
 
+  <!-- Inline SVG fallback icon for when icon.png is not available (pip install) -->
+  <svg id="fallbackIconSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:none;">
+    <circle cx="12" cy="12" r="10" fill="#333" stroke="#555" stroke-width="1"/>
+    <text x="12" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff" font-family="sans-serif">P</text>
+  </svg>
+
   <script>
+    // ── Icon fallback: generate inline data URI so we never 404 ──
+    const ICON_URL = (() => {
+      // Try /icon.png first; if it fails we use an inline SVG data URI
+      const svgEl = document.getElementById('fallbackIconSvg');
+      const svgMarkup = svgEl ? svgEl.outerHTML.replace(' style="display:none;"', '') : '';
+      return {
+        primary: '/icon.png?v=2',
+        fallback: svgMarkup ? 'data:image/svg+xml;base64,' + btoa(svgMarkup) : ''
+      };
+    })();
+
     const INSPECTOR_STATE_KEY = 'polymcp_inspector_state_v1';
     const INSPECTOR_DB_NAME = 'polymcp_inspector_db';
     const INSPECTOR_DB_STORE = 'state_store';
@@ -309,6 +338,16 @@
       if (tab && state.views.includes(tab.activeView)) return tab.activeView;
       if (state.views.includes(state.activeView)) return state.activeView;
       return 'chat';
+    }
+
+    // ── Tab numbering: compute next available number ──
+    function nextTabNumber() {
+      let max = 0;
+      for (const tab of state.tabs) {
+        const m = (tab.name || '').match(/^Project\s+(\d+)$/i);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+      }
+      return max + 1;
     }
 
     function serializeState() {
@@ -379,7 +418,6 @@
           snapshot = serializeState();
         }
       }
-      // Best-effort long-term persistence.
       idbSetState(snapshot).catch(() => {});
     }
 
@@ -399,15 +437,15 @@
         state.tabs = parsed.tabs.map((tab, idx) => ({
           ...createTab(tab.name || `Project ${idx + 1}`),
           ...tab,
-              messages: Array.isArray(tab.messages) && tab.messages.length
-                ? tab.messages.map((m) => ({
-                    role: m.role || 'assistant',
-                    text: m.text || '',
-                    toolTrace: m.toolTrace || null,
-                    uiHtml: m.uiHtml || '',
-                    uiSnapshot: m.uiSnapshot || ''
-                  }))
-                : [{ role: 'assistant', text: 'Hello! Connect/select MCP server(s), choose provider, then ask your request.' }],
+          messages: Array.isArray(tab.messages) && tab.messages.length
+            ? tab.messages.map((m) => ({
+                role: m.role || 'assistant',
+                text: m.text || '',
+                toolTrace: m.toolTrace || null,
+                uiHtml: m.uiHtml || '',
+                uiSnapshot: m.uiSnapshot || ''
+              }))
+            : [{ role: 'assistant', text: 'Hello! Connect/select MCP server(s), choose provider, then ask your request.' }],
           uiResources: Array.isArray(tab.uiResources) ? tab.uiResources : [],
           selectedServerIds: Array.isArray(tab.selectedServerIds) ? tab.selectedServerIds : [],
           activeView: state.views.includes(tab.activeView) ? tab.activeView : (parsed.activeView || 'chat'),
@@ -453,14 +491,13 @@
       }
     }
 
-    // Fast-path recovery before async init.
     restoreStateSyncFallback();
 
     function createTab(name) {
-      const nextNum = state.tabs.length + 1;
+      const num = nextTabNumber();
       return {
         id: `tab_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`,
-        name: name || `Project ${nextNum}`,
+        name: name || `Project ${num}`,
         provider: 'ollama',
         model: '',
         selectedServerIds: [],
@@ -492,7 +529,7 @@
         const el = document.createElement('div');
         el.className = `tab ${tab.id === state.activeTabId ? 'active' : ''}`;
         el.dataset.tab = tab.id;
-        el.innerHTML = `<span>${tab.name}</span><button class="tab-close" title="Close"><i data-feather="x" style="width:12px;height:12px"></i></button>`;
+        el.innerHTML = `<span>${escapeHtml(tab.name)}</span><button class="tab-close" title="Close"><i data-feather="x" style="width:12px;height:12px"></i></button>`;
         el.addEventListener('click', (e) => {
           if (e.target.closest('.tab-close')) return;
           state.activeTabId = tab.id;
@@ -502,9 +539,16 @@
         });
         el.querySelector('.tab-close').addEventListener('click', (e) => {
           e.stopPropagation();
-          if (state.tabs.length <= 1) return;
+          // Always allow closing — if last tab, create a fresh one
           state.tabs = state.tabs.filter(t => t.id !== tab.id);
-          if (state.activeTabId === tab.id) state.activeTabId = state.tabs[0].id;
+          if (state.tabs.length === 0) {
+            const fresh = createTab();
+            if (state.servers.length) fresh.selectedServerIds = [state.servers[0].id];
+            state.tabs.push(fresh);
+            state.activeTabId = fresh.id;
+          } else if (state.activeTabId === tab.id) {
+            state.activeTabId = state.tabs[0].id;
+          }
           const currentTab = activeTab();
           state.activeView = (currentTab && state.views.includes(currentTab.activeView)) ? currentTab.activeView : 'chat';
           saveState();
@@ -566,6 +610,11 @@
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/\n/g, '<br>');
       return text;
+    }
+
+    // ── Assistant avatar HTML with icon.png fallback ──
+    function assistantAvatarHtml() {
+      return `<img class="assistant-avatar-img" src="${ICON_URL.primary}" alt="AI" onerror="this.classList.add('icon-failed');"><i data-feather="cpu" class="assistant-avatar-fallback"></i>`;
     }
 
     function getProviderBackendId(provider) {
@@ -765,7 +814,7 @@
         const isUser = m.role === 'user';
         const avatar = isUser
           ? '<i data-feather="user" style="width:16px;height:16px"></i>'
-          : '<img class="assistant-avatar-img" src="/icon.png?v=2" alt="AI">';
+          : assistantAvatarHtml();
         const author = isUser ? 'You' : 'Assistant';
         const block = m.toolTrace ? buildToolResponseBlock(m.toolTrace) : '';
         const uiBlock = m.uiHtml ? `<div class="tool-response"><div class="tool-header"><i data-feather="layout" style="width:12px;height:12px"></i><span>MCP App UI</span>${idx !== lastAssistantUiIndex ? '<span class="badge">snapshot</span>' : ''}</div><div id="msg-ui-${idx}"></div></div>` : '';
@@ -907,7 +956,6 @@
                 } catch {}
               }, delayMs);
             };
-            // Capture after initial load and after data hydration.
             capture(400);
             capture(1600);
             capture(3200);
@@ -916,7 +964,6 @@
         host.appendChild(frame);
       });
 
-      // Background refresh for models/UI to avoid blocking first render.
       setTimeout(async () => {
         let changed = false;
         try {
