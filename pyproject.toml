@@ -103,7 +103,9 @@ polymcp = [
     "cli/templates/**/*.py",
     "cli/templates/**/*.json",
     "cli/templates/**/*.md",
+    "inspector/static/*",
     "inspector/static/*.html",
+    "inspector/static/*.png",
     "py.typed",
 ]
 
