@@ -5,6 +5,7 @@
 <p align="center">
   <a href="../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.8-blue" alt="Python 3.8+">
+  <img src="https://img.shields.io/badge/CLI-production-ready-green" alt="CLI status">
 </p>
 
 > Command-line interface for creating projects, registering MCP servers, running agents, and validating integrations.
@@ -80,9 +81,34 @@ polymcp server remove http://localhost:8000/mcp
 polymcp agent run
 polymcp agent run --type unified
 polymcp agent run --type codemode
+polymcp agent run --type polyclaw
+polymcp agent run --type polyclaw --docker-image python:3.12-slim
+polymcp agent run --type polyclaw --docker-no-network
+polymcp agent run --type polyclaw --quiet
+polymcp agent run --type polyclaw --intent research
+polymcp agent run --type polyclaw --intent mcp
+polymcp agent run --type polyclaw --strict-no-setup
+polymcp agent run --type polyclaw --no-allow-bootstrap
+polymcp agent run --type polyclaw --no-confirm-delete
+polymcp agent run --type polyclaw --max-iterations 12
+polymcp agent run --type polyclaw --max-stagnant-steps 2
 polymcp agent run --query "Summarize latest server output"
 polymcp agent benchmark --query "Add 2 and 2" --iterations 5
 ```
+
+`🦞 polyclaw` is the autonomous OpenClaw-style agent for end-to-end execution.
+It executes shell steps inside Docker and mounts the current project at `/workspace`.
+It can create/configure/test MCP servers with `polymcp` CLI when useful for the task.
+It shows a live transcript (`THINK`, `SAY`, `ACTION`, `OUTPUT`) by default; use `--quiet` to reduce output.
+It supports intent routing (`--intent auto|research|execution|mcp`); in `auto` it decides the intent by itself.
+By default it runs in autonomous mode (bootstrap/setup allowed if useful).
+Use `--strict-no-setup` and/or `--no-allow-bootstrap` for a stricter constrained mode.
+Delete/remove commands require interactive confirmation by default (`--confirm-delete`).
+Confirmation choices: `y` yes once, `n` no and block next delete commands in this run, `a` always yes, `x` always no.
+In strict research mode without connected tools/servers, it uses built-in web retrieval (no shell) before fallback.
+It stops early when it detects repeated identical actions/results (`--max-stagnant-steps`).
+Python example: `examples/polyclaw_example.py`.
+Advanced workflow example: `examples/polyclaw_mcp_workflow_example.py`.
 
 ### `polymcp test`
 
