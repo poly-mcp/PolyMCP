@@ -21,7 +21,7 @@ It includes:
 - MCP server exposure (HTTP, stdio, in-process)
 - stdio MCP client with connection pooling
 - multi-step agent orchestration
-- 🦞 PolyClaw autonomous OpenClaw-style shell execution agent (Docker-first)
+- 🦞 PolyClaw autonomous OpenClaw-style execution agent (Docker-first)
 - skills via skills.sh (external CLI)
 - sandbox executor modules
 
