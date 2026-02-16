@@ -24,6 +24,7 @@ Version: 1.3.6
 - MCP servers from normal functions
 - MCP clients over HTTP, stdio, or in-process transports
 - Agents that orchestrate one or more MCP servers
+- 🦞 Autonomous OpenClaw-style execution agent workflows with PolyClaw (Docker-first)
 - Skills via skills.sh for tool selection and capability packaging
 - UI-based MCP Apps with HTML resources and tool bridges
 
@@ -231,12 +232,33 @@ const answer = await agent.run('Collect data and summarize.');
 console.log(answer);
 ```
 
+## 🦞 PolyClaw (Autonomous OpenClaw-Style Agent)
+
+PolyClaw is an autonomous agent inspired by OpenClaw, designed for end-to-end execution in PolyMCP workflows.
+
+What it does:
+- Understands a goal and executes the workflow autonomously
+- Runs real shell actions inside Docker with the project mounted at `/workspace`
+- Can create, configure, register, and test MCP servers via `polymcp` CLI when useful
+- Adapts strategy from command output and continues until completion
+- Produces a final report with completed actions, failures, and next concrete step
+
+Safety defaults:
+- Delete/remove commands require confirmation by default (`--confirm-delete`)
+- If destructive commands are denied, PolyClaw reports that no removal was executed
+- Recommended usage: isolated Docker environments for autonomous runs
+
+Python examples:
+- `examples/polyclaw_example.py`
+- `examples/polyclaw_mcp_workflow_example.py`
+
 ## CLI
 
 ```bash
 polymcp init my-project --type http-server
 polymcp server add http://localhost:8000/mcp
 polymcp agent run
+polymcp agent run --type polyclaw --query "Create and validate a local MCP workflow"
 polymcp inspector
 ```
 
