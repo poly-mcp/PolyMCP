@@ -19,7 +19,7 @@ def agent():
 
 @agent.command('run')
 @click.option('--type', 'agent_type', 
-              type=click.Choice(['unified', 'codemode', 'basic']),
+              type=click.Choice(['unified', 'codemode', 'basic', 'polyclaw']),
               default='unified',
               help='Agent type to use')
 @click.option('--llm', type=click.Choice(['openai', 'anthropic', 'ollama']),
@@ -28,21 +28,57 @@ def agent():
 @click.option('--servers', help='Comma-separated list of MCP server URLs')
 @click.option('--verbose', is_flag=True, help='Enable verbose output')
 @click.option('--query', help='Single query to execute (non-interactive)')
+@click.option('--docker-image', default='python:3.11-slim', show_default=True,
+              help='Docker image for polyclaw runtime')
+@click.option('--docker-no-network', is_flag=True,
+              help='Disable network inside polyclaw Docker runtime')
+@click.option('--quiet', is_flag=True,
+              help='Reduce polyclaw live transcript output')
+@click.option('--intent', 'intent_mode',
+              type=click.Choice(['auto', 'research', 'execution', 'mcp']),
+              default='auto',
+              show_default=True,
+              help='Intent routing mode for polyclaw')
+@click.option('--allow-bootstrap/--no-allow-bootstrap', default=True,
+              show_default=True,
+              help='Allow install/bootstrap commands for polyclaw')
+@click.option('--strict-no-setup/--no-strict-no-setup', default=False,
+              show_default=True,
+              help='Block setup commands outside MCP orchestration intent')
+@click.option('--confirm-delete/--no-confirm-delete', default=True,
+              show_default=True,
+              help='Ask confirmation before delete/remove commands in polyclaw')
+@click.option('--max-iterations', default=24, show_default=True,
+              help='Max loop iterations for polyclaw')
+@click.option('--max-stagnant-steps', default=2, show_default=True,
+              help='Stop early when polyclaw repeats same actions/results')
 @click.pass_context
 def run_agent(ctx, agent_type: str, llm: Optional[str], model: Optional[str], 
-              servers: Optional[str], verbose: bool, query: Optional[str]):
+              servers: Optional[str], verbose: bool, query: Optional[str],
+              docker_image: str, docker_no_network: bool, quiet: bool,
+              intent_mode: str, allow_bootstrap: bool, strict_no_setup: bool,
+              confirm_delete: bool,
+              max_iterations: int, max_stagnant_steps: int):
     """
     Run an interactive PolyMCP agent.
     
     Examples:
       polymcp agent run
       polymcp agent run --type codemode
+      polymcp agent run --type polyclaw --query "Create and test a local MCP server"
+      polymcp agent run --type polyclaw --docker-image python:3.12-slim
+      polymcp agent run --type polyclaw --intent research
+      polymcp agent run --type polyclaw --strict-no-setup
+      polymcp agent run --type polyclaw --no-confirm-delete
+      polymcp agent run --type polyclaw --max-iterations 12
+      polymcp agent run --type polyclaw --max-stagnant-steps 2
+      polymcp agent run --type polyclaw --quiet
       polymcp agent run --llm openai --model gpt-4
       polymcp agent run --query "What is 2+2?"
       polymcp agent run --servers http://localhost:8000/mcp,http://localhost:8001/mcp
     """
     try:
-        from polymcp.polyagent import UnifiedPolyAgent, CodeModeAgent, PolyAgent
+        from polymcp.polyagent import UnifiedPolyAgent, CodeModeAgent, PolyAgent, PolyClawAgent
         from polymcp.polyagent.llm_providers import (
             OpenAIProvider, AnthropicProvider, OllamaProvider
         )
@@ -59,7 +95,7 @@ def run_agent(ctx, agent_type: str, llm: Optional[str], model: Optional[str],
         http_servers = registry.get_http_servers()
         server_list = list(http_servers.keys())
         
-        if not server_list:
+        if not server_list and agent_type != "polyclaw":
             click.echo(" No MCP servers configured", err=True)
             click.echo("\nAdd servers with: polymcp server add <url>", err=True)
             return
@@ -72,16 +108,38 @@ def run_agent(ctx, agent_type: str, llm: Optional[str], model: Optional[str],
         return
     
     # Run async agent
-    if asyncio.run(_run_agent_async(agent_type, llm_provider, server_list, verbose, query)):
+    if asyncio.run(
+        _run_agent_async(
+            agent_type,
+            llm_provider,
+            server_list,
+            verbose,
+            query,
+            docker_image,
+            docker_no_network,
+            quiet,
+            intent_mode,
+            allow_bootstrap,
+            strict_no_setup,
+            confirm_delete,
+            max_iterations,
+            max_stagnant_steps,
+        )
+    ):
         return
     else:
         click.echo(" Agent execution failed", err=True)
 
 
 async def _run_agent_async(agent_type: str, llm_provider, server_list: list, 
-                           verbose: bool, query: Optional[str]):
+                           verbose: bool, query: Optional[str],
+                           docker_image: str, docker_no_network: bool, quiet: bool,
+                           intent_mode: str, allow_bootstrap: bool, strict_no_setup: bool,
+                           confirm_delete: bool,
+                           max_iterations: int, max_stagnant_steps: int):
     """Run agent asynchronously."""
-    from polymcp.polyagent import UnifiedPolyAgent, CodeModeAgent, PolyAgent
+    from polymcp.polyagent import UnifiedPolyAgent, CodeModeAgent, PolyAgent, PolyClawAgent
+    from polymcp.polyclaw import PolyClawConfig
     
     click.echo(f"\n Starting {agent_type.upper()} Agent")
     click.echo(f" MCP Servers: {len(server_list)}")
@@ -123,12 +181,32 @@ async def _run_agent_async(agent_type: str, llm_provider, server_list: list,
             return _interactive_mode_sync(agent)
     
     else:  # basic
-        agent = PolyAgent(
-            llm_provider=llm_provider,
-            mcp_servers=server_list,
-            verbose=verbose
-        )
-        
+        if agent_type == 'basic':
+            agent = PolyAgent(
+                llm_provider=llm_provider,
+                mcp_servers=server_list,
+                verbose=verbose
+            )
+        else:  # polyclaw
+            polyclaw_config = PolyClawConfig(
+                verbose=verbose,
+                docker_image=docker_image,
+                docker_enable_network=not docker_no_network,
+                live_mode=not quiet,
+                intent=intent_mode,
+                allow_bootstrap=allow_bootstrap,
+                strict_no_setup=strict_no_setup,
+                confirm_delete_commands=confirm_delete,
+                max_iterations=max(1, int(max_iterations)),
+                max_stagnant_steps=max(1, int(max_stagnant_steps)),
+            )
+            agent = PolyClawAgent(
+                llm_provider=llm_provider,
+                mcp_servers=server_list,
+                config=polyclaw_config,
+                verbose=verbose,
+            )
+
         if query:
             response = agent.run(query)
             click.echo(f"\n Agent: {response}\n")
