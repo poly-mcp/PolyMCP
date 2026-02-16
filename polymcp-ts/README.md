@@ -21,6 +21,7 @@ It includes:
 - MCP server exposure (HTTP, stdio, in-process)
 - stdio MCP client with connection pooling
 - multi-step agent orchestration
+- 🦞 PolyClaw autonomous OpenClaw-style shell execution agent (Docker-first)
 - skills via skills.sh (external CLI)
 - sandbox executor modules
 
@@ -149,6 +150,51 @@ const answer = await agent.run('Collect data and summarize.');
 console.log(answer);
 ```
 
+## 🦞 PolyClaw (Autonomous OpenClaw-Style Agent)
+
+PolyClaw is an autonomous agent inspired by OpenClaw for end-to-end execution in TypeScript PolyMCP workflows.
+
+What it does:
+- Understands a goal and executes the workflow autonomously
+- Runs real shell actions inside Docker with the project mounted at `/workspace`
+- Can create, configure, register, and test MCP servers via `polymcp` CLI when useful
+- Adapts strategy from command output and continues until completion
+- Produces a final report with completed actions, failures, and next concrete step
+
+Safety defaults:
+- Delete/remove commands require confirmation by default (`confirmDeleteCommands: true`)
+- If destructive commands are denied, PolyClaw reports that no removal was executed
+- Recommended usage: isolated Docker environments for autonomous runs
+
+Programmatic usage:
+
+```ts
+import { PolyClawAgent, OllamaProvider } from 'polymcp-ts';
+
+const agent = new PolyClawAgent({
+  llmProvider: new OllamaProvider({
+    model: process.env.OLLAMA_MODEL || 'llama3.2',
+    baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+  }),
+  useDocker: true,
+  intent: 'auto',
+  verbose: true,
+  liveMode: true,
+});
+
+const result = await agent.run('Create and validate an MCP workflow in this project.');
+console.log(result);
+```
+
+Runnable examples:
+- `examples/polyclaw_example.ts`
+- `examples/polyclaw_mcp_workflow_example.ts`
+
+```bash
+npm run example:polyclaw
+npm run example:polyclaw-mcp-workflow
+```
+
 ## Skills (skills.sh)
 
 PolyMCP delegates skills management to the skills.sh CLI.
@@ -217,7 +263,7 @@ Each use case has its own README with endpoint details and tested tool flow.
 
 - servers: `exposeToolsHttp`, `exposeToolsStdio`, `InProcessMCPServer`
 - clients: `MCPStdioClient`, `StdioClientPool`, `withStdioClient`
-- agents: `PolyAgent`, `UnifiedPolyAgent`, `CodeModeAgent`
+- agents: `PolyAgent`, `UnifiedPolyAgent`, `CodeModeAgent`, `PolyClawAgent`
 - skills: `runSkillsCli`
 - execution: `SandboxExecutor`, `DockerSandboxExecutor`
 

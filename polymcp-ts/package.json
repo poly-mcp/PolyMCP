@@ -32,6 +32,8 @@
     "example:stdio-pool": "tsx examples/stdio_complete_example.ts pool",
     "example:docker": "tsx examples/docker_advanced_example.ts quick",
     "example:docker-full": "tsx examples/docker_advanced_example.ts workflow",
+    "example:polyclaw": "tsx examples/polyclaw_example.ts",
+    "example:polyclaw-mcp-workflow": "tsx examples/polyclaw_mcp_workflow_example.ts",
     "example:mcp-apps": "ts-node examples/mcp_apps_examples.ts",
     "example:mcp-apps-complete": "ts-node examples/mcp_apps_complete_example.ts",
     "example:mcp-apps-live": "ts-node examples/mcp_apps_live_server.ts",
