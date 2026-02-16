@@ -37,6 +37,7 @@ export {
 export { PolyAgent, type PolyAgentConfig } from './agent/agent';
 export { UnifiedPolyAgent, type UnifiedPolyAgentConfig } from './agent/unified_agent';
 export { CodeModeAgent, type CodeModeAgentConfig } from './agent/codemode_agent';
+export { PolyClawAgent, type PolyClawAgentConfig } from './agent/polyclaw_agent';
 export {
   UnifiedPolyAgent as UnifiedAgent,
   UnifiedPolyAgent as UnifiedAgentClass,
@@ -45,6 +46,10 @@ export {
   CodeModeAgent as CodeMode,
   CodeModeAgent as CodeModeAgentClass,
 } from './agent/codemode_agent';
+export {
+  PolyClawAgent as PolyClaw,
+  PolyClawAgent as PolyClawAgentClass,
+} from './agent/polyclaw_agent';
 
 // LLM Providers - from agent/
 export {
