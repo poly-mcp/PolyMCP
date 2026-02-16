@@ -17,7 +17,7 @@
 
 PolyMCP gives teams one consistent way to expose tools, connect MCP servers, and run agents that orchestrate those tools. It ships in Python and TypeScript, plus a standalone Inspector and an MCP Apps SDK.
 
-Version: 1.3.6
+Version: 1.3.8
 
 ## What You Can Build
 
